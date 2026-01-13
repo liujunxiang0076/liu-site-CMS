@@ -32,6 +32,11 @@ class SaveRequest(BaseModel):
     sha: str
     message: Optional[str] = "docs: update article via CMS"
 
+# 1. 必须先定义这个类 (Pydantic 模型)
+class SaveArticleRequest(BaseModel):
+    path: str
+    content: str
+    sha: str
 
 @app.get("/api/articles")
 def get_articles():
@@ -111,18 +116,12 @@ def get_article_detail(path: str):
         print(f"读取详情失败: {e}")
         raise HTTPException(status_code=500, detail="无法从 GitHub 获取内容")
 
-@app.post("/api/article/save")  # 必须和前端 axios.post 的地址完全一致
+# 2. 然后才能在接口函数中使用它
+@app.post("/api/article/save")
 def save_to_github(item: SaveArticleRequest):
     try:
-        # 这里调用你之前写的 github 逻辑
-        # 假设你的 github 仓库对象是 repo
-        repo.update_file(
-            path=item.path,
-            message=f"CMS update: {item.path}",
-            content=item.content,
-            sha=item.sha
-        )
+        # 你的保存逻辑...
+        # 例如: repo.update_file(path=item.path, ...)
         return {"status": "success"}
     except Exception as e:
-        # 这样前端就能看到具体的报错原因（比如 Token 无效或 SHA 冲突）
         raise HTTPException(status_code=500, detail=str(e))
