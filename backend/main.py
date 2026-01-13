@@ -111,33 +111,18 @@ def get_article_detail(path: str):
         print(f"读取详情失败: {e}")
         raise HTTPException(status_code=500, detail="无法从 GitHub 获取内容")
 
-@app.post("/api/save")
-async def save_article(data: SaveRequest):
+@app.post("/api/article/save")  # 必须和前端 axios.post 的地址完全一致
+def save_to_github(item: SaveArticleRequest):
     try:
-        # 1. 整理 Metadata
-        # 确保包含用户提供的字段，并强制更新标题
-        meta = data.metadata
-        meta["title"] = data.title
-
-        # 2. 构造完整的 Markdown 内容
-        full_content = compose_markdown(meta, data.content)
-
-        # 3. 决定保存路径 (如果是新文章且没路径，默认存入草稿)
-        save_path = data.path if data.path else f"src/drafts/{data.title}.md"
-
-        # 4. 调用 GitHub API
-        message = f"CMS: {'Update' if data.sha else 'Create'} {data.title}"
-        res = client.save_file(
-            path=save_path, message=message, content=full_content, sha=data.sha
+        # 这里调用你之前写的 github 逻辑
+        # 假设你的 github 仓库对象是 repo
+        repo.update_file(
+            path=item.path,
+            message=f"CMS update: {item.path}",
+            content=item.content,
+            sha=item.sha
         )
-
-        # 返回新的 sha，防止前端连续点击保存报错
-        return {
-            "status": "success",
-            "path": save_path,
-            "sha": res["content"].sha if not data.sha else res["commit"].sha,
-        }
+        return {"status": "success"}
     except Exception as e:
+        # 这样前端就能看到具体的报错原因（比如 Token 无效或 SHA 冲突）
         raise HTTPException(status_code=500, detail=str(e))
-
-
