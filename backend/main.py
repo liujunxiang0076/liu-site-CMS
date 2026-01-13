@@ -116,12 +116,28 @@ def get_article_detail(path: str):
         print(f"读取详情失败: {e}")
         raise HTTPException(status_code=500, detail="无法从 GitHub 获取内容")
 
-# 2. 然后才能在接口函数中使用它
+# 2. 完善后的保存接口
 @app.post("/api/article/save")
 def save_to_github(item: SaveArticleRequest):
     try:
-        # 你的保存逻辑...
-        # 例如: repo.update_file(path=item.path, ...)
+        # 注意：使用 PyGithub 更新文件时，它会自动帮你处理 Base64 
+        # 但如果是通过直接调 API，则需要手动转码。
+        # 这里假设你使用的是全局定义的 repo 对象
+        
+        repo.update_file(
+            path=item.path,              # 文件的完整路径
+            message=f"CMS update: {item.path}", # 提交信息
+            content=item.content,        # 新的内容字符串（PyGithub 会处理编码）
+            sha=item.sha,                # 必须提供旧文件的 SHA 校验值
+            branch="main"                # 或者你的默认分支名
+        )
+        
         return {"status": "success"}
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 打印详细错误到终端，方便排查是 Token 权限还是 SHA 冲突
+        print(f"GitHub 保存报错: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"GitHub 同步失败: {str(e)}"
+        )
