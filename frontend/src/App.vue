@@ -107,63 +107,59 @@ onMounted(fetchList)
 </script>
 
 <style lang="scss" scoped>
-/* 1. 确保最外层占满全屏且不产生外部滚动条 */
+/* 1. 彻底锁死外层，禁止出现任何原生滚动条 */
 .cms-layout {
   display: flex;
   height: 100vh;
   width: 100vw;
-  overflow: hidden; // 禁止外层浏览器滚动条
+  overflow: hidden; // 核心：强制隐藏浏览器最右侧和底部的滚动条
   background-color: #f5f7f9;
 
   .main-content {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-width: 0; // 防止 flex 子元素溢出
+    height: 100vh; // 必须撑满高度
+    min-width: 0;
     background: #fff;
 
     .editor-container {
       display: flex;
       flex-direction: column;
-      height: 100%; // 占满 main-content
-      overflow: hidden;
+      height: 100%; 
+      width: 100%;
+      overflow: hidden; // 再次锁死
 
       .editor-header {
-        height: 50px; // 固定头部高度
+        height: 50px; 
         padding: 0 20px;
         background: #fff;
         border-bottom: 1px solid #e8e8e8;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        flex-shrink: 0; // 禁止头部被压缩
+        flex-shrink: 0; // 确保头部不会被压缩
         
-        .breadcrumb { 
-          font-size: 13px; 
-          color: #909399; 
-          font-family: monospace;
-        }
+        .breadcrumb { font-size: 13px; color: #909399; font-family: monospace; }
       }
 
-      /* 2. 关键：让编辑器组件自适应剩余高度 */
+      /* 2. 核心修复：强制编辑器填满剩余高度，不准超出 */
       .pro-editor {
-        flex: 1; 
+        flex: 1;
         height: calc(100vh - 50px) !important; // 屏幕高度减去 Header 高度
         border: none !important;
       }
     }
-
-    .empty-placeholder {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
   }
 }
 
-/* 3. 强制隐藏编辑器外部可能产生的滚动条（可选） */
+/* 3. 深度选择器：修正编辑器内部组件的样式，防止产生横向滚动 */
 :deep(.md-editor) {
   height: 100% !important;
+}
+
+:deep(.md-editor-content) {
+  height: 100% !important;
+  overflow: hidden; // 让滚动发生在编辑区域内部，而不是组件外层
 }
 </style>
