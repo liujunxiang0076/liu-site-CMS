@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import Sidebar from './components/Sidebar.vue'
 import { MdEditor } from 'md-editor-v3'; 
 import 'md-editor-v3/lib/style.css';
@@ -87,31 +87,48 @@ const handleSelectArticle = async (data: any) => {
 
 // 3. 保存文章（推送至 GitHub）
 const handleSave = async () => {
-  // 如果没有选中文章，或者正在保存中，直接返回
   if (!currentArticle.value || isSaving.value) return
 
-  isSaving.value = true // 开启加载状态
   try {
+    // 1. 弹出输入框
+    const { value: userInputMsg } = await ElMessageBox.prompt(
+      '请输入推送备注（留空将自动生成记录）', 
+      '确认推送至 GitHub', 
+      {
+        confirmButtonText: '确定推送',
+        cancelButtonText: '取消',
+        inputPlaceholder: '例如：优化了开头段落...',
+        // 可以设置一个初始提示，或者完全留空
+      }
+    )
+
+    // 2. 开始加载动画
+    isSaving.value = true
+    
     const res = await axios.post('/api/article/save', {
       path: currentArticle.value.path,
       content: currentArticle.value.content,
-      sha: currentArticle.value.sha
+      sha: currentArticle.value.sha,
+      message: userInputMsg // 将用户输入的（或空的）备注传给后端
     })
 
     if (res.data.status === 'success') {
       ElMessage.success('保存成功，已同步至 GitHub')
       
-      // 保存成功后立即获取最新 SHA，防止连续保存失败
+      // 3. 刷新 SHA
       const detailRes = await axios.get('/api/article/detail', {
         params: { path: currentArticle.value.path }
       })
       currentArticle.value.sha = detailRes.data.sha
     }
-  } catch (err: any) {
-    console.error('保存报错详情:', err.response?.data || err)
-    ElMessage.error(err.response?.data?.detail || '保存失败，请检查 Token 权限或网络')
+  } catch (err) {
+    // 如果用户点击了“取消”按钮，err 会是 'cancel'
+    if (err !== 'cancel') {
+      console.error('保存报错:', err)
+      ElMessage.error(err.response?.data?.detail || '保存失败')
+    }
   } finally {
-    isSaving.value = false // 无论成功还是失败，都要关闭加载状态
+    isSaving.value = false
   }
 }
 

@@ -25,6 +25,7 @@ class SaveArticleRequest(BaseModel):
     path: str
     content: str
     sha: str
+    message: Optional[str] = None  # 允许为空
 
 @app.get("/api/articles")
 def get_articles():
@@ -97,25 +98,23 @@ def get_article_detail(path: str):
 @app.post("/api/article/save")
 def save_to_github(item: SaveArticleRequest):
     try:
-        # 【核心修复】：将 repo 改为 client.repo
-        # 只有通过 client 实例才能访问到你在 GitHubClient 类里初始化的 repo 对象
+        # 逻辑：如果有输入则用输入，没输入则系统自动生成
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        default_msg = f"CMS Update: {os.path.basename(item.path)} ({now})"
+        
+        final_msg = item.message.strip() if item.message and item.message.strip() else default_msg
+
         client.repo.update_file(
             path=item.path,
-            message=f"CMS update: {item.path}",
+            message=final_msg,
             content=item.content,
             sha=item.sha,
             branch="main"
         )
-        
         return {"status": "success"}
-        
     except Exception as e:
         print(f"GitHub 保存报错: {str(e)}")
-        # 将具体的 GitHub 错误返回给前端，方便排查是 SHA 冲突还是 Token 过期
-        raise HTTPException(
-            status_code=500, 
-            detail=f"GitHub 同步失败: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
