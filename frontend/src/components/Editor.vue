@@ -14,18 +14,56 @@ import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import axios from 'axios'
 
+const props = defineProps<{
+  articleData: any // 从 App.vue 传下来的当前文章详情
+}>()
+
+const emit = defineEmits(['refresh'])
+
+// 响应式变量绑定
 const title = ref('')
-const vditor = ref<Vditor | null>(null)
+const currentSha = ref('')
+const currentPath = ref('')
+const metadata = ref({})
 
-// 模拟 handleSave 函数
+// 监听从父组件传下来的文章数据
+// 修改 Editor.vue 中的 watch 部分
+watch(() => props.articleData, (newVal) => {
+  // 核心：不仅要判断 newVal，还要确保 vditor 已经实例化完成
+  if (newVal && vditor.value) {
+    title.value = newVal.metadata?.title || ''
+    // 只有 vditor.value 存在时才调用 setValue
+    vditor.value.setValue(newVal.content || '')
+  }
+}, { immediate: true })
+
 const handleSave = async () => {
-  const content = vditor.value?.getValue()
-  console.log('保存标题：', title.value)
-  console.log('保存内容：', content)
-  // 这里稍后对接后端的保存接口
-  alert('点击了保存，逻辑即将对接！')
-}
+  if (!title.value) return alert('请输入标题')
 
+  const content = vditor.value?.getValue()
+
+  try {
+    const res = await axios.post('/api/save', {
+      path: currentPath.value,
+      title: title.value,
+      content: content,
+      sha: currentSha.value,
+      metadata: metadata.value
+    })
+
+    if (res.data.status === 'success') {
+      alert('保存成功！')
+      // 更新当前的 sha，防止下次保存冲突
+      currentSha.value = res.data.sha
+      // 通知 App.vue 刷新左侧列表
+      emit('refresh')
+    }
+  } catch (e: any) {
+    console.error(e)
+    alert('保存失败：' + (e.response?.data?.detail || '网络错误'))
+  }
+}
+// 确保在挂载后初始化
 onMounted(() => {
   vditor.value = new Vditor('vditor', {
     height: 'calc(100vh - 100px)',
@@ -33,20 +71,13 @@ onMounted(() => {
     upload: {
       url: '/api/upload/image',
       fieldName: 'file',
-      max: 5 * 1024 * 1024,
-      // 核心：把后端返回的结果包装成 Vditor 认得的格式
-      format(files: any, response: string) {
-        const res = JSON.parse(response);
-        if (res.code === 0) {
-          return response; // 后端 main.py 已经封装过一次了，直接返回
-        } else {
-          alert("图片上传失败：" + res.msg);
-          return JSON.stringify({ msg: res.msg, code: 1, data: { errFiles: [files[0].name] } });
-        }
-      }
+      // ... 其他配置
     },
     after: () => {
-      console.log('Vditor 渲染完成')
+      // 渲染完成后，如果已经有数据，就填入内容
+      if (props.articleData) {
+        vditor.value?.setValue(props.articleData.content)
+      }
     }
   })
 })
