@@ -10,6 +10,7 @@
             type="primary" 
             :loading="isSaving"
             @click="handleSave"
+            :disabled="!isModified"
           >
             {{ isSaving ? '同步中...' : '推送至 GitHub' }}
           </el-button>
@@ -45,7 +46,13 @@ const treeData = ref([])
 const isSideLoading = ref(false)
 const isContentLoading = ref(false)
 const isSaving = ref(false) // 新增：控制保存按钮的加载动画
+const originalContent = ref('') // 新增：存储加载时的原始内容
 
+// 计算属性：判断内容是否被修改
+const isModified = computed(() => {
+  if (!currentArticle.value) return false
+  return currentArticle.value.content !== originalContent.value
+})
 // 当前选中的文章详情
 const currentArticle = ref<{
   path: string;
@@ -78,6 +85,8 @@ const handleSelectArticle = async (data: any) => {
       params: { path: data.path }
     })
     currentArticle.value = res.data
+    // 【关键】：加载成功后，保存一份原始备份
+    originalContent.value = res.data.content
   } catch (err) {
     ElMessage.error('读取文章内容失败')
   } finally {
@@ -85,12 +94,12 @@ const handleSelectArticle = async (data: any) => {
   }
 }
 
-// 3. 保存文章（推送至 GitHub）
+// 3. 保存文章
 const handleSave = async () => {
-  if (!currentArticle.value || isSaving.value) return
+  // 额外校验：如果没修改，直接返回
+  if (!currentArticle.value || isSaving.value || !isModified.value) return
 
   try {
-    // 1. 弹出输入框
     const { value: userInputMsg } = await ElMessageBox.prompt(
       '请输入推送备注（留空将自动生成记录）', 
       '确认推送至 GitHub', 
@@ -98,34 +107,31 @@ const handleSave = async () => {
         confirmButtonText: '确定推送',
         cancelButtonText: '取消',
         inputPlaceholder: '例如：优化了开头段落...',
-        // 可以设置一个初始提示，或者完全留空
       }
     )
 
-    // 2. 开始加载动画
     isSaving.value = true
-    
     const res = await axios.post('/api/article/save', {
       path: currentArticle.value.path,
       content: currentArticle.value.content,
       sha: currentArticle.value.sha,
-      message: userInputMsg // 将用户输入的（或空的）备注传给后端
+      message: userInputMsg
     })
 
     if (res.data.status === 'success') {
       ElMessage.success('保存成功，已同步至 GitHub')
       
-      // 3. 刷新 SHA
+      // 【关键】：保存成功后，将当前内容设为新的“原始内容”
+      originalContent.value = currentArticle.value.content
+      
       const detailRes = await axios.get('/api/article/detail', {
         params: { path: currentArticle.value.path }
       })
       currentArticle.value.sha = detailRes.data.sha
     }
   } catch (err) {
-    // 如果用户点击了“取消”按钮，err 会是 'cancel'
     if (err !== 'cancel') {
-      console.error('保存报错:', err)
-      ElMessage.error(err.response?.data?.detail || '保存失败')
+      ElMessage.error('保存失败')
     }
   } finally {
     isSaving.value = false
