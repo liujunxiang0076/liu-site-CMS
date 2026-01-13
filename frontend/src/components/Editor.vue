@@ -34,12 +34,15 @@ onMounted(() => {
       url: '/api/upload/image',
       fieldName: 'file',
       max: 5 * 1024 * 1024,
-      // 如果这里依然报红，可以尝试在末尾加 // @ts-ignore
-      // 或者删除该行（Vditor 默认会自动处理链接插入）
-      // @ts-ignore
-      linkToImgUrl: true,
+      // 核心：把后端返回的结果包装成 Vditor 认得的格式
       format(files: any, response: string) {
-        return response
+        const res = JSON.parse(response);
+        if (res.code === 0) {
+          return response; // 后端 main.py 已经封装过一次了，直接返回
+        } else {
+          alert("图片上传失败：" + res.msg);
+          return JSON.stringify({ msg: res.msg, code: 1, data: { errFiles: [files[0].name] } });
+        }
       }
     },
     after: () => {
