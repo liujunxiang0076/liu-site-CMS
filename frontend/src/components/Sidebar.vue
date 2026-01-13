@@ -1,33 +1,55 @@
 <template>
-  <div class="sidebar">
+  <div class="sidebar" v-loading="loading">
     <div class="header">
       <h3>文章管理</h3>
-      <button @click="$emit('create')" class="add-btn">+</button>
+      <button class="add-btn" @click="$emit('create')" title="新建文章">+</button>
     </div>
 
-    <div class="list-container" v-loading="isLoading" element-loading-text="正在同步 GitHub 文章...">
-      <div v-for="item in articles" :key="item.path" class="article-item" @click="$emit('select', item)">
-        <span class="name">{{ item.name }}</span>
-      </div>
+    <div class="list-container">
+      <el-tree :data="treeData" :props="{ label: 'name', children: 'children' }" highlight-current node-key="path"
+        @node-click="handleNodeClick">
+        <template v-slot="{ node, data }">
+          <div class="tree-node-wrapper">
+            <span class="icon">
+              {{ data.type === 'folder' ? '📁' : '📄' }}
+            </span>
+            <span class="label">{{ node.label }}</span>
+
+            <span v-if="data.type === 'file'" class="type-tag" :class="data.isDraft ? 'draft' : 'post'">
+              {{ data.isDraft ? '草稿' : '发布' }}
+            </span>
+          </div>
+        </template>
+      </el-tree>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// 自动导入插件会处理 ref, onMounted
-import axios from 'axios'
-
+// 接收树形数据和加载状态
 defineProps<{
-  currentPath?: string
-  articles: any[]
+  treeData: any[]
+  loading: boolean
 }>()
 
-defineEmits(['select', 'create'])
+const emit = defineEmits(['select', 'create'])
+
+const defaultProps = {
+  children: 'children',
+  label: 'name'
+}
+
+// 只有点击文件时才触发选择事件
+const handleNodeClick = (data: any) => {
+  if (data.type === 'file') {
+    emit('select', data)
+  }
+}
 </script>
 
 <style lang="scss" scoped>
 .sidebar {
-  width: 260px;
+  width: 280px; // 稍微加宽一点，给树形缩进留空间
   height: 100vh;
   border-right: 1px solid #eee;
   background: #fafafa;
@@ -41,6 +63,12 @@ defineEmits(['select', 'create'])
     align-items: center;
     border-bottom: 1px solid #eee;
 
+    h3 {
+      margin: 0;
+      font-size: 18px;
+      color: #333;
+    }
+
     .add-btn {
       width: 28px;
       height: 28px;
@@ -49,6 +77,11 @@ defineEmits(['select', 'create'])
       background: #42b883;
       color: white;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      transition: background 0.3s;
 
       &:hover {
         background: #33a06f;
@@ -59,34 +92,56 @@ defineEmits(['select', 'create'])
   .list-container {
     flex: 1;
     overflow-y: auto;
-    padding: 10px;
+    padding: 10px 5px;
 
-    .article-item {
-      padding: 12px 15px;
-      margin-bottom: 5px;
-      border-radius: 6px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      transition: all 0.2s;
-      font-size: 14px;
+    // 深度覆盖 Element Plus 样式，使其匹配你的 UI
+    :deep(.el-tree) {
+      background: transparent;
 
-      &:hover {
-        background: #f0f0f0;
+      .el-tree-node__content {
+        height: auto; // 允许内容撑开高度
+        padding: 4px 0;
+        border-radius: 6px;
+        margin-bottom: 2px;
+
+        &:hover {
+          background-color: #f0f0f0;
+        }
       }
 
-      &.active {
-        background: #e7f6ed;
+      .el-tree-node.is-current>.el-tree-node__content {
+        background-color: #e7f6ed !important;
         color: #42b883;
-        font-weight: bold;
+      }
+    }
+
+    .tree-node-wrapper {
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      width: 100%;
+      overflow: hidden;
+
+      .icon {
+        margin-right: 8px;
+        font-size: 14px;
+      }
+
+      .label {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .type-tag {
         font-size: 10px;
-        padding: 2px 4px;
+        padding: 1px 4px;
         border-radius: 3px;
+        margin-left: 8px;
         margin-right: 10px;
         color: white;
+        transform: scale(0.9);
 
         &.post {
           background: #42b883;
@@ -95,12 +150,6 @@ defineEmits(['select', 'create'])
         &.draft {
           background: #fb7299;
         }
-      }
-
-      .name {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
     }
   }
