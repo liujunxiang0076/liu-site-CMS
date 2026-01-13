@@ -6,7 +6,13 @@
       <div v-if="currentArticle" class="editor-container">
         <div class="editor-header">
           <span class="path-tag">{{ currentArticle.path }}</span>
-          <el-button type="primary" @click="handleSave">推送至 GitHub</el-button>
+          <el-button 
+            type="primary" 
+            :loading="isSaving"
+            @click="handleSave"
+          >
+            {{ isSaving ? '同步中...' : '推送至 GitHub' }}
+          </el-button>
         </div>
 
         <MdEditor 
@@ -38,6 +44,7 @@ import 'md-editor-v3/lib/style.css';
 const treeData = ref([])
 const isSideLoading = ref(false)
 const isContentLoading = ref(false)
+const isSaving = ref(false) // 新增：控制保存按钮的加载动画
 
 // 当前选中的文章详情
 const currentArticle = ref<{
@@ -64,9 +71,7 @@ const fetchList = async () => {
 
 // 2. 选中文章并获取详情
 const handleSelectArticle = async (data: any) => {
-  // 文件夹不触发读取
   if (data.type !== 'file') return
-
   isContentLoading.value = true
   try {
     const res = await axios.get('/api/article/detail', {
@@ -80,23 +85,23 @@ const handleSelectArticle = async (data: any) => {
   }
 }
 
-// 3. 保存文章
-// 修改后的保存函数
+// 3. 保存文章（推送至 GitHub）
 const handleSave = async () => {
-  if (!currentArticle.value) return
+  // 如果没有选中文章，或者正在保存中，直接返回
+  if (!currentArticle.value || isSaving.value) return
 
+  isSaving.value = true // 开启加载状态
   try {
     const res = await axios.post('/api/article/save', {
       path: currentArticle.value.path,
       content: currentArticle.value.content,
-      sha: currentArticle.value.sha // 必须是当前文件最新的 SHA
+      sha: currentArticle.value.sha
     })
 
     if (res.data.status === 'success') {
       ElMessage.success('保存成功，已同步至 GitHub')
       
-      // 【关键修复】：保存成功后，重新获取一次详情以同步最新的 SHA
-      // 否则第二次保存会因为 SHA 不匹配而报 409 错误（显示为保存失败）
+      // 保存成功后立即获取最新 SHA，防止连续保存失败
       const detailRes = await axios.get('/api/article/detail', {
         params: { path: currentArticle.value.path }
       })
@@ -105,11 +110,9 @@ const handleSave = async () => {
   } catch (err: any) {
     console.error('保存报错详情:', err.response?.data || err)
     ElMessage.error(err.response?.data?.detail || '保存失败，请检查 Token 权限或网络')
+  } finally {
+    isSaving.value = false // 无论成功还是失败，都要关闭加载状态
   }
-}
-
-const createNewArticle = () => {
-  ElMessage.info('新建功能开发中...')
 }
 
 onMounted(fetchList)
@@ -140,7 +143,7 @@ onMounted(fetchList)
       overflow: hidden; // 再次锁死
 
       .editor-header {
-        height: 50px; 
+        height: 54px; // 稍微加高一点，视觉更协调
         padding: 0 20px;
         background: #fff;
         border-bottom: 1px solid #e8e8e8;
@@ -149,26 +152,59 @@ onMounted(fetchList)
         align-items: center;
         flex-shrink: 0; // 确保头部不会被压缩
         
-        .breadcrumb { font-size: 13px; color: #909399; font-family: monospace; }
+        .path-tag {
+          font-size: 13px;
+          color: #666;
+          background: #f0f2f5;
+          padding: 4px 10px;
+          border-radius: 4px;
+          font-family: 'Fira Code', monospace;
+        }
       }
 
-      /* 2. 核心修复：强制编辑器填满剩余高度，不准超出 */
+      /* 2. 核心修复：强制编辑器填满剩余高度 */
       .pro-editor {
         flex: 1;
-        height: calc(100vh - 50px) !important; // 屏幕高度减去 Header 高度
+        height: calc(100vh - 54px) !important; // 屏幕高度减去 Header 高度
         border: none !important;
       }
+    }
+
+    /* 空状态居中样式 */
+    .empty-state {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
   }
 }
 
-/* 3. 深度选择器：修正编辑器内部组件的样式，防止产生横向滚动 */
+/* 3. 深度选择器：修正编辑器内部组件的样式 */
 :deep(.md-editor) {
+  height: 100% !important;
+  border: none !important;
+}
+
+/* 优化预览区域的间距，让它看起来更像博客文章 */
+:deep(.md-editor-preview) {
+  padding: 40px !important;
+  word-break: break-word;
+}
+
+/* 隐藏 Frontmatter 后，给顶部留一点空白，美观一些 */
+:deep(.md-editor-content) {
   height: 100% !important;
 }
 
-:deep(.md-editor-content) {
-  height: 100% !important;
-  overflow: hidden; // 让滚动发生在编辑区域内部，而不是组件外层
+/* 针对保存按钮的微调：让 Loading 旋转更平滑 */
+.el-button {
+  transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+  font-weight: 500;
+  
+  // 当处于加载状态时，轻微改变透明度
+  &.is-loading {
+    opacity: 0.85;
+  }
 }
 </style>
