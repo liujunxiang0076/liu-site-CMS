@@ -15,6 +15,7 @@
           class="pro-editor"
           placeholder="开始你的 Typora 式体验..."
           :no-front-matter="true"
+          @onSave="handleSave"
         />
       </div>
 
