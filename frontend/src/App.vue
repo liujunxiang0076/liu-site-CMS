@@ -80,6 +80,7 @@ const handleSelectArticle = async (data: any) => {
 }
 
 // 3. 保存文章
+// 修改后的保存函数
 const handleSave = async () => {
   if (!currentArticle.value) return
 
@@ -87,16 +88,22 @@ const handleSave = async () => {
     const res = await axios.post('/api/article/save', {
       path: currentArticle.value.path,
       content: currentArticle.value.content,
-      sha: currentArticle.value.sha
+      sha: currentArticle.value.sha // 必须是当前文件最新的 SHA
     })
 
     if (res.data.status === 'success') {
       ElMessage.success('保存成功，已同步至 GitHub')
-      // 这里的重点：保存后 GitHub 会生成新 SHA，所以要重新获取列表
-      fetchList()
+      
+      // 【关键修复】：保存成功后，重新获取一次详情以同步最新的 SHA
+      // 否则第二次保存会因为 SHA 不匹配而报 409 错误（显示为保存失败）
+      const detailRes = await axios.get('/api/article/detail', {
+        params: { path: currentArticle.value.path }
+      })
+      currentArticle.value.sha = detailRes.data.sha
     }
-  } catch (err) {
-    ElMessage.error('保存失败，请检查网络或 Token 权限')
+  } catch (err: any) {
+    console.error('保存报错详情:', err.response?.data || err)
+    ElMessage.error(err.response?.data?.detail || '保存失败，请检查 Token 权限或网络')
   }
 }
 
