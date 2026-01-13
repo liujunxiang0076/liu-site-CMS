@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from dotenv import load_dotenv
 from github import Github
+import base64
 
 # 如果你使用了之前建议的工具类
 from core.github_client import GitHubClient
@@ -24,39 +25,91 @@ REPO_NAME = os.getenv("REPO_NAME")
 client = GitHubClient()
 uploader = TelegramUploader()
 
-
-# 确保在这些类定义之前已经导入了 BaseModel
+# 定义保存请求的模型
 class SaveRequest(BaseModel):
     path: str
-    title: str
     content: str
-    sha: Optional[str] = None
-    metadata: dict = {}
+    sha: str
+    message: Optional[str] = "docs: update article via CMS"
 
 
 @app.get("/api/articles")
 def get_articles():
     try:
-        # 使用 recursive=True 参数，GitHub 会直接返回整个项目的扁平化文件树
+        # 1. 获取全量文件树
         tree = client.repo.get_git_tree("main", recursive=True)
-        articles = []
         
+        root = {"name": "Root", "children": []}
+        folder_map = {"": root}
+
+        # 2. 构建树形结构
         for file in tree.tree:
-            # 过滤出位于指定目录下且以 .md 结尾的文件
+            # 过滤目标路径
             if file.path.startswith(("src/posts/", "src/drafts/")) and file.path.endswith(".md"):
-                # 识别类型
-                art_type = "post" if "src/posts/" in file.path else "draft"
+                path_parts = file.path.split('/')
                 
-                articles.append({
-                    "name": os.path.basename(file.path), # 只显示文件名
-                    "path": file.path,                   # 完整路径用于后续读取
-                    "type": art_type
-                })
-        return articles
+                current_path = ""
+                for i in range(len(path_parts) - 1):
+                    part = path_parts[i]
+                    parent_path = current_path
+                    current_path = f"{current_path}/{part}" if current_path else part
+                    
+                    if current_path not in folder_map:
+                        new_folder = {"name": part, "type": "folder", "children": []}
+                        folder_map[parent_path]["children"].append(new_folder)
+                        folder_map[current_path] = new_folder
+                
+                # 添加文件节点
+                file_node = {
+                    "name": path_parts[-1],
+                    "path": file.path,
+                    "type": "file",
+                    "sha": file.sha,
+                    "isDraft": "src/drafts/" in file.path  # 标记是否为草稿
+                }
+                folder_map[current_path]["children"].append(file_node)
+
+        # 3. 【核心逻辑】裁剪层级：跳过 src，合并 posts 和 drafts
+        final_list = []
+        
+        # 找到 src 节点
+        src_node = next((n for n in root["children"] if n["name"] == "src"), None)
+        
+        if src_node:
+            # 提取 posts 下的内容
+            posts_node = next((n for n in src_node["children"] if n["name"] == "posts"), None)
+            if posts_node:
+                final_list.extend(posts_node["children"])
+            
+            # 提取 drafts 下的内容
+            drafts_node = next((n for n in src_node["children"] if n["name"] == "drafts"), None)
+            if drafts_node:
+                final_list.extend(drafts_node["children"])
+
+        # 返回裁剪后的列表（直接显示 2024, 2025 等文件夹）
+        return final_list
+
     except Exception as e:
-        print(f"获取全量树失败: {e}")
+        print(f"Tree API Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/article/detail")
+def get_article_detail(path: str):
+    """获取文章详情"""
+    try:
+        content_file = client.repo.get_contents(path)
+        # GitHub 返回的是 Base64 编码，需要解码为字符串
+        raw_content = base64.b64decode(content_file.content).decode('utf-8')
+        
+        return {
+            "path": path,
+            "title": os.path.basename(path),
+            "content": raw_content,
+            "sha": content_file.sha
+        }
+    except Exception as e:
+        print(f"读取详情失败: {e}")
+        raise HTTPException(status_code=500, detail="无法从 GitHub 获取内容")
 
 @app.post("/api/save")
 async def save_article(data: SaveRequest):
@@ -86,3 +139,5 @@ async def save_article(data: SaveRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
