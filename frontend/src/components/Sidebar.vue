@@ -4,16 +4,10 @@
       <h3>文章管理</h3>
       <button @click="$emit('create')" class="add-btn">+</button>
     </div>
-    
-    <div class="list-container">
-      <div 
-        v-for="item in articles" 
-        :key="item.path"
-        :class="['article-item', { active: currentPath === item.path }]"
-        @click="$emit('select', item)"
-      >
-        <span :class="['type-tag', item.type]">{{ item.type === 'draft' ? '草' : '文' }}</span>
-        <span class="name">{{ item.name.replace('.md', '') }}</span>
+
+    <div class="list-container" v-loading="isLoading" element-loading-text="正在同步 GitHub 文章...">
+      <div v-for="item in articles" :key="item.path" class="article-item" @click="$emit('select', item)">
+        <span class="name">{{ item.name }}</span>
       </div>
     </div>
   </div>
@@ -46,7 +40,7 @@ defineEmits(['select', 'create'])
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #eee;
-    
+
     .add-btn {
       width: 28px;
       height: 28px;
@@ -55,7 +49,10 @@ defineEmits(['select', 'create'])
       background: #42b883;
       color: white;
       cursor: pointer;
-      &:hover { background: #33a06f; }
+
+      &:hover {
+        background: #33a06f;
+      }
     }
   }
 
@@ -74,7 +71,10 @@ defineEmits(['select', 'create'])
       transition: all 0.2s;
       font-size: 14px;
 
-      &:hover { background: #f0f0f0; }
+      &:hover {
+        background: #f0f0f0;
+      }
+
       &.active {
         background: #e7f6ed;
         color: #42b883;
@@ -87,8 +87,14 @@ defineEmits(['select', 'create'])
         border-radius: 3px;
         margin-right: 10px;
         color: white;
-        &.post { background: #42b883; }
-        &.draft { background: #fb7299; }
+
+        &.post {
+          background: #42b883;
+        }
+
+        &.draft {
+          background: #fb7299;
+        }
       }
 
       .name {
