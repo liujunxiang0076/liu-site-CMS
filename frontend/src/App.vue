@@ -14,6 +14,7 @@
           editor-id="my-editor"
           class="pro-editor"
           placeholder="开始你的 Typora 式体验..."
+          :no-front-matter="true"
         />
       </div>
 
