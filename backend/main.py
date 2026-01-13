@@ -1,38 +1,26 @@
 import os
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional
 from dotenv import load_dotenv
-from github import Github
 import base64
 
-# 如果你使用了之前建议的工具类
+# 导入你自定义的工具类
 from core.github_client import GitHubClient
 from core.image_uploader import TelegramUploader
 
 # 1. 加载配置
 load_dotenv()
 
-# 2. 实例化 FastAPI (这是解决你报错的关键)
+# 2. 实例化 FastAPI
 app = FastAPI()
 
 # 3. 初始化工具类
-# 这里的配置要对应你 .env 里的变量名
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO_NAME = os.getenv("REPO_NAME")
-
-# 如果你用了我们之前写的 GitHubClient 类
+# GitHubClient 内部会读取 .env 中的 GITHUB_TOKEN 和 REPO_NAME
 client = GitHubClient()
 uploader = TelegramUploader()
 
-# 定义保存请求的模型
-class SaveRequest(BaseModel):
-    path: str
-    content: str
-    sha: str
-    message: Optional[str] = "docs: update article via CMS"
-
-# 1. 必须先定义这个类 (Pydantic 模型)
+# 定义请求模型
 class SaveArticleRequest(BaseModel):
     path: str
     content: str
@@ -41,15 +29,13 @@ class SaveArticleRequest(BaseModel):
 @app.get("/api/articles")
 def get_articles():
     try:
-        # 1. 获取全量文件树
+        # 使用 client.repo 获取全量文件树
         tree = client.repo.get_git_tree("main", recursive=True)
         
         root = {"name": "Root", "children": []}
         folder_map = {"": root}
 
-        # 2. 构建树形结构
         for file in tree.tree:
-            # 过滤目标路径
             if file.path.startswith(("src/posts/", "src/drafts/")) and file.path.endswith(".md"):
                 path_parts = file.path.split('/')
                 
@@ -64,34 +50,27 @@ def get_articles():
                         folder_map[parent_path]["children"].append(new_folder)
                         folder_map[current_path] = new_folder
                 
-                # 添加文件节点
                 file_node = {
                     "name": path_parts[-1],
                     "path": file.path,
                     "type": "file",
                     "sha": file.sha,
-                    "isDraft": "src/drafts/" in file.path  # 标记是否为草稿
+                    "isDraft": "src/drafts/" in file.path
                 }
                 folder_map[current_path]["children"].append(file_node)
 
-        # 3. 【核心逻辑】裁剪层级：跳过 src，合并 posts 和 drafts
         final_list = []
-        
-        # 找到 src 节点
         src_node = next((n for n in root["children"] if n["name"] == "src"), None)
         
         if src_node:
-            # 提取 posts 下的内容
             posts_node = next((n for n in src_node["children"] if n["name"] == "posts"), None)
             if posts_node:
                 final_list.extend(posts_node["children"])
             
-            # 提取 drafts 下的内容
             drafts_node = next((n for n in src_node["children"] if n["name"] == "drafts"), None)
             if drafts_node:
                 final_list.extend(drafts_node["children"])
 
-        # 返回裁剪后的列表（直接显示 2024, 2025 等文件夹）
         return final_list
 
     except Exception as e:
@@ -100,10 +79,9 @@ def get_articles():
 
 @app.get("/api/article/detail")
 def get_article_detail(path: str):
-    """获取文章详情"""
     try:
+        # 同样使用 client.repo
         content_file = client.repo.get_contents(path)
-        # GitHub 返回的是 Base64 编码，需要解码为字符串
         raw_content = base64.b64decode(content_file.content).decode('utf-8')
         
         return {
@@ -116,28 +94,29 @@ def get_article_detail(path: str):
         print(f"读取详情失败: {e}")
         raise HTTPException(status_code=500, detail="无法从 GitHub 获取内容")
 
-# 2. 完善后的保存接口
 @app.post("/api/article/save")
 def save_to_github(item: SaveArticleRequest):
     try:
-        # 注意：使用 PyGithub 更新文件时，它会自动帮你处理 Base64 
-        # 但如果是通过直接调 API，则需要手动转码。
-        # 这里假设你使用的是全局定义的 repo 对象
-        
-        repo.update_file(
-            path=item.path,              # 文件的完整路径
-            message=f"CMS update: {item.path}", # 提交信息
-            content=item.content,        # 新的内容字符串（PyGithub 会处理编码）
-            sha=item.sha,                # 必须提供旧文件的 SHA 校验值
-            branch="main"                # 或者你的默认分支名
+        # 【核心修复】：将 repo 改为 client.repo
+        # 只有通过 client 实例才能访问到你在 GitHubClient 类里初始化的 repo 对象
+        client.repo.update_file(
+            path=item.path,
+            message=f"CMS update: {item.path}",
+            content=item.content,
+            sha=item.sha,
+            branch="main"
         )
         
         return {"status": "success"}
         
     except Exception as e:
-        # 打印详细错误到终端，方便排查是 Token 权限还是 SHA 冲突
         print(f"GitHub 保存报错: {str(e)}")
+        # 将具体的 GitHub 错误返回给前端，方便排查是 SHA 冲突还是 Token 过期
         raise HTTPException(
             status_code=500, 
             detail=f"GitHub 同步失败: {str(e)}"
         )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=3000)
