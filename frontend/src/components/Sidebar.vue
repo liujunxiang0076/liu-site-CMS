@@ -158,8 +158,7 @@ const handleNameConfirm = (data: any) => {
   background: #ffffff; // 保持清爽白色
   display: flex;
   flex-direction: column;
-  user-select: none;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); // 平滑动画
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   // 收缩状态样式
   &.is-collapsed {
@@ -172,38 +171,55 @@ const handleNameConfirm = (data: any) => {
     }
     
     .collapse-trigger {
-      right: -24px; // 按钮悬浮在侧边栏外
-      border: 1px solid #e8e8e8;
-      background: #fff;
+      /* 自动贴边：向左收回一半多，只露个边 */
+      right: -14px; 
+      opacity: 0.3; // 贴边时保持高透明
+      background: #ffffff;
+      border: 1px solid #dcdfe6;
+      color: #909399;
+
+      &:hover {
+        opacity: 1;
+        right: -12px; // 鼠标移入稍微弹出来一点
+        background: #42b883;
+        color: #fff;
+        border-color: #42b883;
+        /* 增加延迟防抖：移入立即显示，移出延迟消失 */
+        transition: all 0.2s ease, opacity 0.2s ease;
+      }
     }
   }
 
-  .sidebar-content {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    width: 260px; // 固定宽度防止收缩时文字换行扭曲
-    transition: opacity 0.2s;
-  }
-
-  // 控制按钮
+  // --- 通用触发器样式 ---
   .collapse-trigger {
     position: absolute;
-    right: -12px;
     top: 50%;
+    right: -12px; // 展开态默认居中边框
     transform: translateY(-50%);
     width: 24px;
     height: 24px;
     background: #f0f0f0;
-    border-radius: 50%;
+    border-radius: 50%; // 保持圆形
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    z-index: 10;
+    z-index: 100;
     color: #909399;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    transition: all 0.3s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    /* 核心：消失时增加 0.4s 延迟，防止鼠标滑过边缘时的“抖动” */
+    transition: all 0.2s ease, opacity 0.3s ease 0.4s; 
+
+    // 扩大交互热区：防止鼠标精准度要求过高导致的抖动
+    &::before {
+      content: '';
+      position: absolute;
+      width: 40px; // 热区比按钮大
+      height: 60px;
+      left: -10px;
+      top: -18px;
+      background: transparent;
+    }
 
     &:hover {
       background: #42b883;
