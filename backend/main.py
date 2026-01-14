@@ -2,9 +2,11 @@ import os
 import datetime
 import base64
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from dotenv import load_dotenv
+from core.response import success, fail
 
 # 导入自定义工具类
 from core.github_client import GitHubClient
@@ -37,6 +39,20 @@ class RenameArticleRequest(BaseModel):
     new_path: str
     sha: str
     content: Optional[str] = None # 如果重命名时内容有变化可以一起传
+
+# 允许跨域的源
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- API 接口 ---
 
@@ -78,23 +94,23 @@ def get_articles():
             for sub in src_node["children"]:
                 if sub["name"] in ["posts", "drafts"]:
                     final_list.extend(sub["children"])
-        return final_list
+        return success(data=final_list)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return fail(msg=str(e))
 
 @app.get("/api/article/detail")
 def get_article_detail(path: str):
     try:
         content_file = client.repo.get_contents(path)
         raw_content = base64.b64decode(content_file.content).decode('utf-8')
-        return {
+        return success(data={
             "path": path,
             "title": os.path.basename(path),
             "content": raw_content,
             "sha": content_file.sha
-        }
+        })
     except Exception as e:
-        raise HTTPException(status_code=500, detail="无法获取内容")
+        return fail(msg="无法获取内容")
 
 @app.post("/api/article/save")
 def save_to_github(item: SaveArticleRequest):
@@ -116,9 +132,9 @@ def save_to_github(item: SaveArticleRequest):
         else:
             params["sha"] = item.sha
             client.repo.update_file(**params)
-        return {"status": "success"}
+        return success(msg="保存成功")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return fail(msg=str(e))
 
 # 新增：删除接口
 @app.post("/api/article/delete")
@@ -130,9 +146,9 @@ def delete_article(item: DeleteArticleRequest):
             sha=item.sha,
             branch="main"
         )
-        return {"status": "success"}
+        return success(msg="删除成功")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+        return fail(msg=f"删除失败: {str(e)}")
 
 # 新增：重命名接口 (GitHub API 逻辑：新建+删除)
 @app.post("/api/article/rename")
@@ -159,9 +175,9 @@ def rename_article(item: RenameArticleRequest):
             sha=item.sha,
             branch="main"
         )
-        return {"status": "success"}
+        return success(msg="重命名成功")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"重命名失败: {str(e)}")
+        return fail(msg=f"重命名失败: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
