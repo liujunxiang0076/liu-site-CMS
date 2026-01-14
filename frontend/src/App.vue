@@ -1,29 +1,19 @@
 <template>
   <div class="cms-layout">
-    <Sidebar :tree-data="treeData" :loading="isSideLoading" @select="handleSelectArticle" @create-article="handleNewArticle"  @create-folder="handleNewFolder"/>
-
+    <Sidebar :tree-data="treeData" :loading="isSideLoading" @select="handleSelectArticle"
+      @create-article="handleNewArticle" @create-folder="handleNewFolder" @refresh="fetchList" @rename="handleRename"
+      @delete="handleDelete" />
     <main class="main-content" v-loading="isContentLoading">
       <div v-if="currentArticle" class="editor-container">
         <div class="editor-header">
           <span class="path-tag">{{ currentArticle.path }}</span>
-          <el-button 
-            type="primary" 
-            :loading="isSaving"
-            @click="handleSave"
-            :disabled="!isModified"
-          >
+          <el-button type="primary" :loading="isSaving" @click="handleSave" :disabled="!isModified">
             {{ isSaving ? '同步中...' : '推送至 GitHub' }}
           </el-button>
         </div>
 
-        <MdEditor 
-          v-model="currentArticle.content" 
-          editor-id="my-editor"
-          class="pro-editor"
-          placeholder="开始你的 Typora 式体验..."
-          :no-front-matter="true"
-          @onSave="handleSave"
-        />
+        <MdEditor v-model="currentArticle.content" editor-id="my-editor" class="pro-editor"
+          placeholder="开始你的 Typora 式体验..." :no-front-matter="true" @onSave="handleSave" />
       </div>
 
       <div v-else class="empty-state">
@@ -34,32 +24,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue' // 修复：必须显式导入 computed
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Sidebar from './components/Sidebar.vue'
-import { MdEditor } from 'md-editor-v3'; 
+import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/style.css';
 
 // --- 状态定义 ---
 const treeData = ref([])
 const isSideLoading = ref(false)
 const isContentLoading = ref(false)
-const isSaving = ref(false) // 新增：控制保存按钮的加载动画
-const originalContent = ref('') // 新增：存储加载时的原始内容
+const isSaving = ref(false) 
+const originalContent = ref('') 
 
-// 计算属性：判断内容是否被修改
-const isModified = computed(() => {
-  if (!currentArticle.value) return false
-  return currentArticle.value.content !== originalContent.value
-})
-// 当前选中的文章详情
 const currentArticle = ref<{
   path: string;
   title: string;
   content: string;
   sha: string;
 } | null>(null)
+
+// 计算属性：判断内容是否被修改
+const isModified = computed(() => {
+  if (!currentArticle.value) return false
+  return currentArticle.value.content !== originalContent.value
+})
 
 // --- 逻辑处理 ---
 
@@ -76,7 +66,7 @@ const fetchList = async () => {
   }
 }
 
-// 2. 选中文章并获取详情
+// 2. 选中文章
 const handleSelectArticle = async (data: any) => {
   if (data.type !== 'file') return
   isContentLoading.value = true
@@ -85,7 +75,6 @@ const handleSelectArticle = async (data: any) => {
       params: { path: data.path }
     })
     currentArticle.value = res.data
-    // 【关键】：加载成功后，保存一份原始备份
     originalContent.value = res.data.content
   } catch (err) {
     ElMessage.error('读取文章内容失败')
@@ -94,15 +83,14 @@ const handleSelectArticle = async (data: any) => {
   }
 }
 
-// 3. 保存文章
+// 3. 保存/推送文章
 const handleSave = async () => {
-  // 额外校验：如果没修改，直接返回
   if (!currentArticle.value || isSaving.value || !isModified.value) return
 
   try {
     const { value: userInputMsg } = await ElMessageBox.prompt(
-      '请输入推送备注（留空将自动生成记录）', 
-      '确认推送至 GitHub', 
+      '请输入推送备注（留空将自动生成记录）',
+      '确认推送至 GitHub',
       {
         confirmButtonText: '确定推送',
         cancelButtonText: '取消',
@@ -119,25 +107,49 @@ const handleSave = async () => {
     })
 
     if (res.data.status === 'success') {
-      ElMessage.success('保存成功，已同步至 GitHub')
-      
-      // 【关键】：保存成功后，将当前内容设为新的“原始内容”
+      ElMessage.success('保存成功')
       originalContent.value = currentArticle.value.content
-      
+      // 重新获取 SHA 避免冲突
       const detailRes = await axios.get('/api/article/detail', {
         params: { path: currentArticle.value.path }
       })
       currentArticle.value.sha = detailRes.data.sha
+      fetchList() // 刷新列表以更新可能的显示状态
     }
   } catch (err) {
-    if (err !== 'cancel') {
-      ElMessage.error('保存失败')
-    }
+    if (err !== 'cancel') ElMessage.error('保存失败')
   } finally {
     isSaving.value = false
   }
 }
-// App.vue 中的新建处理函数
+
+// 4. 重命名处理 (VS Code 逻辑补全)
+const handleRename = async ({ data, newName }: { data: any, newName: string }) => {
+  // 注意：GitHub 重命名通常需要 API 支持（先删后建或 Move 接口）
+  // 这里先实现前端提示，待后端 main.py 补全接口
+  ElMessage.info(`准备重命名为: ${newName} (正在开发中)`)
+  // 操作成功后刷新列表
+  // await axios.post('/api/article/rename', { oldPath: data.path, newName })
+  // fetchList()
+}
+
+// 5. 删除处理 (右键菜单补全)
+const handleDelete = async (data: any) => {
+  try {
+    await ElMessageBox.confirm(`确定要删除 ${data.name} 吗？此操作不可撤销`, '警告', {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    
+    ElMessage.warning(`正在请求删除: ${data.path} (需要后端接口支持)`)
+    // 操作成功后刷新并清空当前编辑器
+    // await axios.post('/api/article/delete', { path: data.path })
+    // if (currentArticle.value?.path === data.path) currentArticle.value = null
+    // fetchList()
+  } catch { /* 取消删除 */ }
+}
+
 const handleNewArticle = async () => {
   try {
     const { value: name } = await ElMessageBox.prompt('请输入文章标题', '新建文章', {
@@ -145,24 +157,18 @@ const handleNewArticle = async () => {
       cancelButtonText: '取消',
       inputPlaceholder: '不要包含 .md 后缀',
     })
-    
+
     if (name) {
-      // 关键：切换到新文章状态
       currentArticle.value = {
-        path: `src/posts/2026/${name}.md`, // 这里建议根据实际目录动态拼接
+        path: `src/posts/2026/${name}.md`,
         title: name,
         content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始你的创作...`,
-        sha: "" // 必须为空，标记为新建
+        sha: "" 
       }
-      
-      // 必须同步更新这个值，否则按钮可能依然是置灰的（因为 computed 依赖它）
-      originalContent.value = "" 
-      
-      ElMessage.success('草稿已就绪，编辑完成后点击“推送”同步到 GitHub')
+      originalContent.value = ""
+      ElMessage.success('草稿就绪，点击推送同步')
     }
-  } catch (e) {
-    // 用户取消
-  }
+  } catch (e) {}
 }
 
 const handleNewFolder = async () => {
@@ -171,13 +177,10 @@ const handleNewFolder = async () => {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
     })
-    
     if (folderName) {
-      // 逻辑：由于 GitHub 不支持空文件夹，你可以直接弹窗提示
-      // 或者在本地 treeData 里临时 push 一个虚拟节点
-      ElMessage.info(`文件夹 "${folderName}" 已在本地就绪。请在该目录下新建文章，推送时会自动创建文件夹。`)
+      ElMessage.info(`文件夹 "${folderName}" 已就绪，在该目录下创建文件即可同步。`)
     }
-  } catch { /* 用户取消 */ }
+  } catch {}
 }
 
 onMounted(fetchList)
@@ -203,7 +206,7 @@ onMounted(fetchList)
     .editor-container {
       display: flex;
       flex-direction: column;
-      height: 100%; 
+      height: 100%;
       width: 100%;
       overflow: hidden; // 再次锁死
 
@@ -216,7 +219,7 @@ onMounted(fetchList)
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0; // 确保头部不会被压缩
-        
+
         .path-tag {
           font-size: 13px;
           color: #666;
@@ -266,7 +269,7 @@ onMounted(fetchList)
 .el-button {
   transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
   font-weight: 500;
-  
+
   // 当处于加载状态时，轻微改变透明度
   &.is-loading {
     opacity: 0.85;
