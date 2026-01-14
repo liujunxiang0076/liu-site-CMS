@@ -1,62 +1,85 @@
 <template>
-  <div class="sidebar" v-loading="loading" @click="hideContextMenu">
-    <div class="header">
-      <span class="title">文章管理</span>
-      <div class="actions">
-        <el-icon @click="emit('create-article')" title="新建文章">
-          <DocumentAdd />
-        </el-icon>
-        <el-icon @click="emit('create-folder')" title="新建文件夹">
-          <FolderAdd />
-        </el-icon>
-        <el-icon @click="emit('refresh')" title="刷新列表">
-          <Refresh />
-        </el-icon>
-      </div>
+  <div class="sidebar" :class="{ 'is-collapsed': isCollapsed }" v-loading="loading" @click="hideContextMenu">
+    
+    <div class="collapse-trigger" @click.stop="isCollapsed = !isCollapsed">
+      <el-icon>
+        <ArrowLeft v-if="!isCollapsed" />
+        <ArrowRight v-else />
+      </el-icon>
     </div>
 
-    <div class="list-container">
-      <el-tree :data="treeData" :props="{ label: 'name', children: 'children' }" highlight-current node-key="path"
-        :indent="16" @node-click="handleNodeClick" @node-contextmenu="handleRightClick">
-        <template v-slot="{ node, data }">
-          <div class="tree-node-wrapper" :class="{ 'is-virtual': data.isVirtual }">
-            <template v-if="!data.isEditing">
-              <span class="icon">{{ data.type === 'folder' ? '📁' : '📄' }}</span>
-              <span class="label" :class="{ 'is-draft': data.isDraft }">{{ node.label }}</span>
-              <span v-if="data.isModified" class="unsaved-dot"></span>
-              <el-tag v-if="data.isVirtual" size="small" type="info" effect="plain" class="local-tag">
-                本地
-              </el-tag>
-            </template>
+    <div class="sidebar-content" v-show="!isCollapsed">
+      <div class="header">
+        <span class="title">文章管理</span>
+        <div class="actions">
+          <el-icon @click="emit('create-article')" title="新建文章">
+            <DocumentAdd />
+          </el-icon>
+          <el-icon @click="emit('create-folder')" title="新建文件夹">
+            <FolderAdd />
+          </el-icon>
+          <el-icon @click="emit('refresh')" title="刷新列表">
+            <Refresh />
+          </el-icon>
+        </div>
+      </div>
 
-            <template v-else>
-              <span class="icon">{{ data.type === 'folder' ? '📁' : '📄' }}</span>
-              <el-input v-model="data.tempName" size="small" class="inline-input" @blur="handleNameConfirm(data)"
-                @keyup.enter="handleNameConfirm(data)" v-focus />
-            </template>
-          </div>
-        </template>
-      </el-tree>
+      <div class="list-container">
+        <el-tree 
+          :data="treeData" 
+          :props="{ label: 'name', children: 'children' }" 
+          highlight-current 
+          node-key="path"
+          :indent="16" 
+          @node-click="handleNodeClick" 
+          @node-contextmenu="handleRightClick"
+        >
+          <template v-slot="{ node, data }">
+            <div class="tree-node-wrapper" :class="{ 'is-virtual': data.isVirtual }">
+              <template v-if="!data.isEditing">
+                <span class="icon">{{ data.type === 'folder' ? '📁' : '📄' }}</span>
+                <span class="label" :class="{ 'is-draft': data.isDraft }">{{ node.label }}</span>
+                <span v-if="data.isModified" class="unsaved-dot"></span>
+                <el-tag v-if="data.isVirtual" size="small" type="info" effect="plain" class="local-tag">本地</el-tag>
+              </template>
+
+              <template v-else>
+                <span class="icon">{{ data.type === 'folder' ? '📁' : '📄' }}</span>
+                <el-input 
+                  v-model="data.tempName" 
+                  size="small" 
+                  class="inline-input" 
+                  @blur="handleNameConfirm(data)"
+                  @keyup.enter="handleNameConfirm(data)" 
+                  v-focus 
+                />
+              </template>
+            </div>
+          </template>
+        </el-tree>
+      </div>
     </div>
 
     <div v-if="menu.visible" :style="{ top: menu.y + 'px', left: menu.x + 'px' }" class="context-menu">
       <div class="menu-item" @click="handleMenuAction('rename')">
-        <el-icon>
-          <Edit />
-        </el-icon> 重命名
+        <el-icon><Edit /></el-icon> 重命名
       </div>
       <div class="menu-item delete" @click="handleMenuAction('delete')">
-        <el-icon>
-          <Delete />
-        </el-icon> 删除
+        <el-icon><Delete /></el-icon> 删除
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick } from 'vue'
-import { DocumentAdd, FolderAdd, Refresh, Edit, Delete } from '@element-plus/icons-vue'
+import { ref, reactive } from 'vue'
+import { 
+  DocumentAdd, FolderAdd, Refresh, Edit, Delete, 
+  ArrowLeft, ArrowRight // 新增图标
+} from '@element-plus/icons-vue'
+
+// --- 新增状态 ---
+const isCollapsed = ref(false)
 
 // 定义 Props
 defineProps<{
@@ -93,6 +116,7 @@ const handleNodeClick = (data: any) => {
 
 // 触发右键菜单
 const handleRightClick = (event: MouseEvent, data: any) => {
+  if (isCollapsed.value) return // 收缩状态不显示右键菜单
   event.preventDefault()
   menu.visible = true
   menu.x = event.clientX
@@ -127,6 +151,7 @@ const handleNameConfirm = (data: any) => {
 
 <style lang="scss" scoped>
 .sidebar {
+  position: relative;
   width: 260px;
   height: 100vh;
   border-right: 1px solid #e8e8e8;
@@ -134,14 +159,67 @@ const handleNameConfirm = (data: any) => {
   display: flex;
   flex-direction: column;
   user-select: none;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); // 平滑动画
 
+  // 收缩状态样式
+  &.is-collapsed {
+    width: 0px; // 完全收起，如果想留个边可以设为 12px
+    border-right: none;
+    
+    .sidebar-content {
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .collapse-trigger {
+      right: -24px; // 按钮悬浮在侧边栏外
+      border: 1px solid #e8e8e8;
+      background: #fff;
+    }
+  }
+
+  .sidebar-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 260px; // 固定宽度防止收缩时文字换行扭曲
+    transition: opacity 0.2s;
+  }
+
+  // 控制按钮
+  .collapse-trigger {
+    position: absolute;
+    right: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    background: #f0f0f0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    color: #909399;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: all 0.3s;
+
+    &:hover {
+      background: #42b883;
+      color: #fff;
+    }
+  }
+
+  /* ... 保持你原有的其他样式不变 ... */
   .header {
     padding: 12px 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #f0f0f0;
-
+    white-space: nowrap; // 防止标题换行
+    
     .title {
       font-size: 13px;
       font-weight: 600;
@@ -169,6 +247,7 @@ const handleNameConfirm = (data: any) => {
 
   .list-container {
     flex: 1;
+    overflow-x: hidden; // 隐藏横向滚动条
     overflow-y: auto;
     padding: 8px 4px;
 
