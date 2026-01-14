@@ -30,6 +30,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import Sidebar from './components/Sidebar.vue'
 import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/style.css';
+import { articleApi } from '@/api/article'
+
 
 // --- 状态定义 ---
 const treeData = ref<any[]>([])
@@ -76,10 +78,9 @@ const getTargetDirPath = () => {
 const fetchList = async () => {
   isSideLoading.value = true
   try {
-    const res = await axios.get('/api/articles')
-    treeData.value = res.data
-  } catch (err) {
-    ElMessage.error('同步文章列表失败')
+    // 此时 res 直接就是后端返回的数据，因为 client.ts 做了拦截处理
+    const res = await articleApi.getList()
+    treeData.value = res.data 
   } finally {
     isSideLoading.value = false
   }
@@ -92,7 +93,7 @@ const handleSelectArticle = async (data: any) => {
   
   isContentLoading.value = true
   try {
-    const res = await axios.get('/api/article/detail', { params: { path: data.path } })
+    const res = await articleApi.getDetail(data.path)
     currentArticle.value = res.data
     originalContent.value = res.data.content
   } catch (err) {
@@ -191,7 +192,7 @@ const handleSave = async () => {
     )
 
     isSaving.value = true
-    const res = await axios.post('/api/article/save', {
+    const res = await articleApi.save({
       path: currentArticle.value.path,
       content: currentArticle.value.content,
       sha: currentArticle.value.sha,
@@ -204,7 +205,7 @@ const handleSave = async () => {
       // 关键：同步成功后重新拉取列表，消除“本地”状态
       await fetchList()
       // 更新 SHA
-      const detailRes = await axios.get('/api/article/detail', { params: { path: currentArticle.value.path } })
+      const detailRes = await articleApi.getDetail(currentArticle.value.path)
       currentArticle.value.sha = detailRes.data.sha
     }
   } catch (err) {
@@ -219,11 +220,7 @@ const handleRename = async ({ data, newName }: { data: any, newName: string }) =
   try {
     const newPath = data.path.substring(0, data.path.lastIndexOf('/') + 1) + newName
     isSideLoading.value = true
-    await axios.post('/api/article/rename', {
-      old_path: data.path,
-      new_path: newPath,
-      sha: data.sha
-    })
+    await articleApi.rename(data.path, newPath, data.sha)
     ElMessage.success('重命名成功')
     await fetchList()
   } catch (err) {
@@ -237,7 +234,7 @@ const handleDelete = async (data: any) => {
   try {
     await ElMessageBox.confirm(`确定要删除 ${data.name} 吗？`, '警告', { type: 'warning' })
     isSideLoading.value = true
-    await axios.post('/api/article/delete', { path: data.path, sha: data.sha })
+    await articleApi.delete(data.path, data.sha)
     ElMessage.success('文件已从 GitHub 删除')
     if (currentArticle.value?.path === data.path) currentArticle.value = null
     await fetchList()
