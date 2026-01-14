@@ -1,18 +1,12 @@
 <template>
   <div class="editor-container">
     <div class="toolbar">
-      <input 
-        v-model="currentArticle.title" 
-        class="title-input" 
-        placeholder="输入文章标题..." 
-      />
+      <div class="status-dot" :class="articleStatus" :title="statusTip"></div>
+
+      <input v-model="currentArticle.title" class="title-input" placeholder="输入文章标题..." />
       <div class="actions">
-        <span v-if="isSaving" class="status-text">正在同步同步...</span>
-        <button 
-          @click="handleSave" 
-          class="save-btn" 
-          :disabled="isSaving"
-        >
+        <span v-if="isSaving" class="status-text">同步中...</span>
+        <button @click="handleSave" class="save-btn" :disabled="isSaving">
           {{ isSaving ? '保存中...' : '保存到 GitHub' }}
         </button>
       </div>
@@ -26,9 +20,10 @@ import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { ref, watch, computed, onMounted } from 'vue'
 
 const props = defineProps<{
-  articleData: any 
+  articleData: any
 }>()
 
 const emit = defineEmits(['refresh'])
@@ -36,6 +31,8 @@ const emit = defineEmits(['refresh'])
 // --- 状态定义 ---
 const vditor = ref<Vditor | null>(null)
 const isSaving = ref(false)
+const originalContent = ref('') // 记录刚打开时的内容
+const isModifiedLocally = ref(false) // 局部状态，用于强制触发实时变色
 
 // 内部维护的当前文章状态
 const currentArticle = ref({
@@ -45,7 +42,27 @@ const currentArticle = ref({
   content: ''
 })
 
-// --- 核心逻辑：数据同步 ---
+// --- 核心逻辑：状态判断 ---
+
+const articleStatus = computed(() => {
+  // 1. 如果没有 SHA，说明是新建但从未同步过 GitHub 的虚拟文件
+  if (!currentArticle.value.sha) return 'is-new'
+
+  // 2. 如果当前内容与原始内容不一致，说明修改了
+  const currentContent = vditor.value?.getValue() || ''
+  // 这里的 isModifiedLocally 确保在输入时能触发 computed 重新计算
+  if (isModifiedLocally.value || currentContent !== originalContent.value) {
+    return 'is-modified'
+  }
+
+  // 3. 否则是已同步状态
+  return 'is-synced'
+})
+
+const statusTip = computed(() => {
+  const tips = { 'is-new': '新文档 (未同步)', 'is-modified': '已修改 (待保存)', 'is-synced': '内容已同步' }
+  return tips[articleStatus.value]
+})
 
 // 监听父组件数据变化
 watch(() => props.articleData, (newVal) => {
@@ -55,8 +72,11 @@ watch(() => props.articleData, (newVal) => {
   currentArticle.value.path = newVal.path
   currentArticle.value.sha = newVal.sha
   currentArticle.value.title = newVal.title || newVal.name?.replace('.md', '') || ''
-  
-  // 确保编辑器存在后再填充内容
+
+  // 关键：记录初始内容
+  originalContent.value = newVal.content || ''
+  isModifiedLocally.value = false // 重置修改状态
+
   if (vditor.value) {
     const vdContent = vditor.value.getValue()
     if (vdContent !== newVal.content) {
@@ -89,13 +109,15 @@ const handleSave = async () => {
       
       // 更新 SHA 避免下次提交 409 冲突
       currentArticle.value.sha = res.data.sha
-      
-      // 触发列表刷新
+
+      // 重要：保存后将当前内容设为“原始内容”，让点变绿
+      originalContent.value = content || ''
+      isModifiedLocally.value = false
+
       emit('refresh')
     }
   } catch (e: any) {
-    console.error('Save Error:', e)
-    ElMessage.error(e.response?.data?.detail || '保存失败，请检查网络')
+    ElMessage.error(e.response?.data?.detail || '保存失败')
   } finally {
     isSaving.value = false
   }
@@ -104,14 +126,13 @@ const handleSave = async () => {
 // --- 初始化编辑器 ---
 onMounted(() => {
   vditor.value = new Vditor('vditor', {
-    height: 'calc(100vh - 70px)', // 减去 toolbar 高度
-    mode: 'ir', // 即时渲染，最接近 Typora 的体验
-    cache: { enable: false }, // 必须关闭，否则多文章切换会串内容
+    height: 'calc(100vh - 70px)',
+    mode: 'ir',
+    cache: { enable: false },
     placeholder: '输入正文内容...',
-    theme: 'classic',
-    icon: 'ant', // 图标风格
-    toolbarConfig: {
-      pin: true // 工具栏置顶
+    // 监听输入事件，实现小点实时变色
+    input: (value) => {
+      isModifiedLocally.value = value !== originalContent.value
     },
     // 图片上传配置
     upload: {
@@ -158,7 +179,31 @@ onMounted(() => {
     background: #ffffff;
     border-bottom: 1px solid #f0f0f0;
     align-items: center;
-    justify-content: space-between;
+
+    // --- 指示灯样式 ---
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 15px;
+      transition: all 0.3s ease;
+
+      &.is-new {
+        background: #f56c6c; // 红色：新文档
+        box-shadow: 0 0 6px rgba(245, 108, 108, 0.5);
+      }
+
+      &.is-modified {
+        background: #e6a23c; // 黄色：已修改
+        box-shadow: 0 0 6px rgba(230, 162, 60, 0.5);
+        animation: breath 2s infinite ease-in-out;
+      }
+
+      &.is-synced {
+        background: #67c23a; // 绿色：已同步
+        box-shadow: 0 0 5px rgba(103, 194, 58, 0.5);
+      }
+    }
 
     .title-input {
       flex: 1;
@@ -219,6 +264,24 @@ onMounted(() => {
     // 覆盖 Vditor 默认边框
     :deep(.vditor) {
       border: none;
+    }
+  }
+
+  // 呼吸动画，让黄色小点更有提示感
+  @keyframes breath {
+    0% {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    50% {
+      opacity: 0.6;
+      transform: scale(1.2);
+    }
+
+    100% {
+      opacity: 1;
+      transform: scale(1);
     }
   }
 }
