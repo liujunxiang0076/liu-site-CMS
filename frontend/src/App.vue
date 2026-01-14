@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue' // 修复：必须显式导入 computed
+import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Sidebar from './components/Sidebar.vue'
@@ -32,11 +32,12 @@ import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/style.css';
 
 // --- 状态定义 ---
-const treeData = ref([])
+const treeData = ref<any[]>([])
 const isSideLoading = ref(false)
 const isContentLoading = ref(false)
 const isSaving = ref(false) 
 const originalContent = ref('') 
+const selectedNode = ref<any>(null) // 统一记录当前选中的节点
 
 const currentArticle = ref<{
   path: string;
@@ -51,7 +52,7 @@ const isModified = computed(() => {
   return currentArticle.value.content !== originalContent.value
 })
 
-// --- 逻辑处理 ---
+// --- 核心逻辑 ---
 
 // 1. 获取文章列表
 const fetchList = async () => {
@@ -66,35 +67,104 @@ const fetchList = async () => {
   }
 }
 
-// 2. 选中文章
+// 2. 选中节点处理
 const handleSelectArticle = async (data: any) => {
+  selectedNode.value = data 
   if (data.type !== 'file') return
+  
   isContentLoading.value = true
   try {
-    const res = await axios.get('/api/article/detail', {
-      params: { path: data.path }
-    })
+    const res = await axios.get('/api/article/detail', { params: { path: data.path } })
     currentArticle.value = res.data
     originalContent.value = res.data.content
   } catch (err) {
-    ElMessage.error('读取文章内容失败')
+    ElMessage.error('读取内容失败')
   } finally {
     isContentLoading.value = false
   }
 }
 
-// 3. 保存/推送文章
+// 3. 智能获取当前目标目录路径 (VS Code 逻辑)
+const getTargetDirPath = () => {
+  // 如果没有选中，或者选中的是根部文件，默认放在 posts 根目录
+  if (!selectedNode.value) return 'src/posts'
+  
+  if (selectedNode.value.type === 'folder') {
+    return selectedNode.value.path
+  } else {
+    // 如果选中的是文件，返回该文件所在的父级目录
+    const pathParts = selectedNode.value.path.split('/')
+    pathParts.pop() // 移除文件名
+    return pathParts.join('/')
+  }
+}
+
+// 4. 新建文章逻辑
+const handleNewArticle = async () => {
+  try {
+    const { value: name } = await ElMessageBox.prompt('请输入文章标题', '新建文章', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '标题不能为空'
+    })
+    
+    if (name) {
+      const parentPath = getTargetDirPath()
+      const fileName = name.endsWith('.md') ? name : `${name}.md`
+      
+      currentArticle.value = {
+        path: `${parentPath}/${fileName}`,
+        title: name,
+        content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始你的创作...`,
+        sha: "" // 标记为新建
+      }
+      originalContent.value = ""
+      ElMessage.success(`草稿已在目录 [${parentPath}] 下准备就绪`)
+    }
+  } catch (e) {}
+}
+
+// 5. 新建文件夹逻辑 (本地虚拟节点)
+const handleNewFolder = async () => {
+  try {
+    const { value: folderName } = await ElMessageBox.prompt('请输入文件夹名称', '新建文件夹')
+    if (!folderName) return
+
+    const parentPath = getTargetDirPath()
+    
+    // 创建虚拟节点
+    const newNode = {
+      name: folderName,
+      path: `${parentPath}/${folderName}`,
+      type: 'folder',
+      children: [],
+      isVirtual: true // Sidebar 会通过这个字段显示绿色斜体和“本地”标签
+    }
+
+    // 如果父目录就是根
+    if (parentPath === 'src/posts' || parentPath === 'src/drafts') {
+       // 直接找对应根节点插入
+       const rootFolder = treeData.value.find(n => n.path === parentPath)
+       if(rootFolder) rootFolder.children.unshift(newNode)
+       else treeData.value.unshift(newNode)
+    } else {
+      // 递归寻找并插入
+      insertNodeToTree(treeData.value, parentPath, newNode)
+    }
+    
+    ElMessage.success('临时文件夹已创建（推送文件后将自动同步）')
+  } catch (e) {}
+}
+
+// 6. 保存/推送文章
 const handleSave = async () => {
   if (!currentArticle.value || isSaving.value || !isModified.value) return
 
   try {
     const { value: userInputMsg } = await ElMessageBox.prompt(
-      '请输入推送备注（留空将自动生成记录）',
-      '确认推送至 GitHub',
-      {
+      '请输入推送备注', '确认推送至 GitHub', {
         confirmButtonText: '确定推送',
         cancelButtonText: '取消',
-        inputPlaceholder: '例如：优化了开头段落...',
+        inputPlaceholder: '系统将自动生成默认备注...'
       }
     )
 
@@ -107,14 +177,16 @@ const handleSave = async () => {
     })
 
     if (res.data.status === 'success') {
-      ElMessage.success('保存成功')
+      ElMessage.success('GitHub 同步成功')
       originalContent.value = currentArticle.value.content
-      // 重新获取 SHA 避免冲突
+      // 必须刷新列表，让虚拟文件夹变成真实文件夹
+      await fetchList()
+      
+      // 重新获取详情以拿到最新的 SHA
       const detailRes = await axios.get('/api/article/detail', {
         params: { path: currentArticle.value.path }
       })
       currentArticle.value.sha = detailRes.data.sha
-      fetchList() // 刷新列表以更新可能的显示状态
     }
   } catch (err) {
     if (err !== 'cancel') ElMessage.error('保存失败')
@@ -123,64 +195,50 @@ const handleSave = async () => {
   }
 }
 
-// 4. 重命名处理 (VS Code 逻辑补全)
+// 7. 重命名与删除 (对接后端接口)
 const handleRename = async ({ data, newName }: { data: any, newName: string }) => {
-  // 注意：GitHub 重命名通常需要 API 支持（先删后建或 Move 接口）
-  // 这里先实现前端提示，待后端 main.py 补全接口
-  ElMessage.info(`准备重命名为: ${newName} (正在开发中)`)
-  // 操作成功后刷新列表
-  // await axios.post('/api/article/rename', { oldPath: data.path, newName })
-  // fetchList()
+  try {
+    const newPath = data.path.substring(0, data.path.lastIndexOf('/') + 1) + newName
+    isSideLoading.value = true
+    await axios.post('/api/article/rename', {
+      old_path: data.path,
+      new_path: newPath,
+      sha: data.sha
+    })
+    ElMessage.success('重命名成功')
+    await fetchList()
+  } catch (err) {
+    ElMessage.error('重命名失败')
+  } finally {
+    isSideLoading.value = false
+  }
 }
 
-// 5. 删除处理 (右键菜单补全)
 const handleDelete = async (data: any) => {
   try {
-    await ElMessageBox.confirm(`确定要删除 ${data.name} 吗？此操作不可撤销`, '警告', {
-      confirmButtonText: '确定删除',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    
-    ElMessage.warning(`正在请求删除: ${data.path} (需要后端接口支持)`)
-    // 操作成功后刷新并清空当前编辑器
-    // await axios.post('/api/article/delete', { path: data.path })
-    // if (currentArticle.value?.path === data.path) currentArticle.value = null
-    // fetchList()
-  } catch { /* 取消删除 */ }
+    await ElMessageBox.confirm(`确定要删除 ${data.name} 吗？`, '警告', { type: 'warning' })
+    isSideLoading.value = true
+    await axios.post('/api/article/delete', { path: data.path, sha: data.sha })
+    ElMessage.success('文件已从 GitHub 删除')
+    if (currentArticle.value?.path === data.path) currentArticle.value = null
+    await fetchList()
+  } catch (e) {} finally {
+    isSideLoading.value = false
+  }
 }
 
-const handleNewArticle = async () => {
-  try {
-    const { value: name } = await ElMessageBox.prompt('请输入文章标题', '新建文章', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputPlaceholder: '不要包含 .md 后缀',
-    })
+// --- 辅助工具函数 ---
 
-    if (name) {
-      currentArticle.value = {
-        path: `src/posts/2026/${name}.md`,
-        title: name,
-        content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始你的创作...`,
-        sha: "" 
-      }
-      originalContent.value = ""
-      ElMessage.success('草稿就绪，点击推送同步')
+const insertNodeToTree = (nodes: any[], targetPath: string, newNode: any): boolean => {
+  for (const node of nodes) {
+    if (node.path === targetPath && node.type === 'folder') {
+      if (!node.children) node.children = []
+      node.children.unshift(newNode)
+      return true
     }
-  } catch (e) {}
-}
-
-const handleNewFolder = async () => {
-  try {
-    const { value: folderName } = await ElMessageBox.prompt('请输入文件夹名称', '新建文件夹', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-    })
-    if (folderName) {
-      ElMessage.info(`文件夹 "${folderName}" 已就绪，在该目录下创建文件即可同步。`)
-    }
-  } catch {}
+    if (node.children && insertNodeToTree(node.children, targetPath, newNode)) return true
+  }
+  return false
 }
 
 onMounted(fetchList)
