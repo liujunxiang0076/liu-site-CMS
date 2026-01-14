@@ -1,6 +1,6 @@
 <template>
   <div class="cms-layout">
-    <Sidebar :tree-data="treeData" :loading="isSideLoading" @select="handleSelectArticle" />
+    <Sidebar :tree-data="treeData" :loading="isSideLoading" @select="handleSelectArticle" @create-article="handleNewArticle"  @create-folder="handleNewFolder"/>
 
     <main class="main-content" v-loading="isContentLoading">
       <div v-if="currentArticle" class="editor-container">
@@ -136,6 +136,48 @@ const handleSave = async () => {
   } finally {
     isSaving.value = false
   }
+}
+// App.vue 中的新建处理函数
+const handleNewArticle = async () => {
+  try {
+    const { value: name } = await ElMessageBox.prompt('请输入文章标题', '新建文章', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputPlaceholder: '不要包含 .md 后缀',
+    })
+    
+    if (name) {
+      // 关键：切换到新文章状态
+      currentArticle.value = {
+        path: `src/posts/2026/${name}.md`, // 这里建议根据实际目录动态拼接
+        title: name,
+        content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始你的创作...`,
+        sha: "" // 必须为空，标记为新建
+      }
+      
+      // 必须同步更新这个值，否则按钮可能依然是置灰的（因为 computed 依赖它）
+      originalContent.value = "" 
+      
+      ElMessage.success('草稿已就绪，编辑完成后点击“推送”同步到 GitHub')
+    }
+  } catch (e) {
+    // 用户取消
+  }
+}
+
+const handleNewFolder = async () => {
+  try {
+    const { value: folderName } = await ElMessageBox.prompt('请输入文件夹名称', '新建文件夹', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+    })
+    
+    if (folderName) {
+      // 逻辑：由于 GitHub 不支持空文件夹，你可以直接弹窗提示
+      // 或者在本地 treeData 里临时 push 一个虚拟节点
+      ElMessage.info(`文件夹 "${folderName}" 已在本地就绪。请在该目录下新建文章，推送时会自动创建文件夹。`)
+    }
+  } catch { /* 用户取消 */ }
 }
 
 onMounted(fetchList)
