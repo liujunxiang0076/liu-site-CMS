@@ -85,7 +85,9 @@ def get_articles():
                     "sha": file.sha,
                     "isDraft": "src/drafts/" in file.path
                 }
-                folder_map[current_path]["children"].append(file_node)
+                # 容错处理：确保 current_path 在 map 中
+                if current_path in folder_map:
+                    folder_map[current_path]["children"].append(file_node)
 
         # 整理返回列表
         final_list = []
@@ -94,23 +96,26 @@ def get_articles():
             for sub in src_node["children"]:
                 if sub["name"] in ["posts", "drafts"]:
                     final_list.extend(sub["children"])
-        return success(data=final_list)
+        
+        # 返回标准成功结构，携带数据总量
+        return success(data=final_list, total=len(final_list))
     except Exception as e:
-        return fail(msg=str(e))
+        return fail(msg=f"获取文章列表失败: {str(e)}", code=Code.INTERNAL_ERROR)
 
 @app.get("/api/article/detail")
 def get_article_detail(path: str):
     try:
         content_file = client.repo.get_contents(path)
         raw_content = base64.b64decode(content_file.content).decode('utf-8')
+        
+        # 返回详情，并带上关键的 SHA
         return success(data={
             "path": path,
             "title": os.path.basename(path),
             "content": raw_content,
-            "sha": content_file.sha
-        })
+        }, sha=content_file.sha)
     except Exception as e:
-        return fail(msg="无法获取内容")
+        return fail(msg=f"读取文件内容失败: {path}", code=Code.NOT_FOUND)
 
 @app.post("/api/article/save")
 def save_to_github(item: SaveArticleRequest):
@@ -127,14 +132,22 @@ def save_to_github(item: SaveArticleRequest):
         }
 
         # 判断新建还是更新
-        if not item.sha or item.sha == "" or item.sha == "new":
-            client.repo.create_file(**params)
+        if not item.sha or item.sha in ["", "new"]:
+            res = client.repo.create_file(**params)
+            action = "创建"
         else:
             params["sha"] = item.sha
-            client.repo.update_file(**params)
-        return success(msg="保存成功")
+            res = client.repo.update_file(**params)
+            action = "更新"
+            
+        # 核心：必须返回新的 SHA，否则前端无法连续保存
+        new_sha = res['content'].sha
+        return success(msg=f"文件{action}成功", sha=new_sha)
     except Exception as e:
-        return fail(msg=str(e))
+        # 处理常见错误：SHA 冲突
+        if "does not match" in str(e):
+            return fail(msg="保存失败：GitHub 版本冲突，请刷新页面重新编辑", code=Code.GITHUB_ERROR)
+        return fail(msg=f"保存失败: {str(e)}", code=Code.INTERNAL_ERROR)
 
 # 新增：删除接口
 @app.post("/api/article/delete")
@@ -146,22 +159,22 @@ def delete_article(item: DeleteArticleRequest):
             sha=item.sha,
             branch="main"
         )
-        return success(msg="删除成功")
+        return success(msg="文章已从 GitHub 彻底移除")
     except Exception as e:
-        return fail(msg=f"删除失败: {str(e)}")
+        return fail(msg=f"删除操作失败: {str(e)}", code=Code.GITHUB_ERROR)
 
 # 新增：重命名接口 (GitHub API 逻辑：新建+删除)
 @app.post("/api/article/rename")
 def rename_article(item: RenameArticleRequest):
     try:
-        # 1. 如果没传内容，先获取原文件内容
+        # 1. 获取内容
         content = item.content
         if not content:
             old_file = client.repo.get_contents(item.old_path)
             content = base64.b64decode(old_file.content).decode('utf-8')
 
         # 2. 在新路径创建文件
-        client.repo.create_file(
+        create_res = client.repo.create_file(
             path=item.new_path,
             message=f"CMS Rename (Create): {item.old_path} -> {item.new_path}",
             content=content,
@@ -175,9 +188,11 @@ def rename_article(item: RenameArticleRequest):
             sha=item.sha,
             branch="main"
         )
-        return success(msg="重命名成功")
+        
+        # 返回新文件的 SHA，以便前端立即继续编辑新文件
+        return success(msg="重命名成功", sha=create_res['content'].sha)
     except Exception as e:
-        return fail(msg=f"重命名失败: {str(e)}")
+        return fail(msg=f"重命名失败: {str(e)}", code=Code.INTERNAL_ERROR)
 
 if __name__ == "__main__":
     import uvicorn
