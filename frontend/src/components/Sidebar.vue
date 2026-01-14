@@ -2,7 +2,19 @@
   <div class="sidebar" v-loading="loading">
     <div class="header">
       <h3>文章管理</h3>
-      <button class="add-btn" @click="$emit('create')" title="新建文章">+</button>
+      <el-dropdown trigger="click" @command="handleCommand">
+        <button class="add-btn">
+          <el-icon>
+            <Plus />
+          </el-icon>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="article">📄 新建文章 (.md)</el-dropdown-item>
+            <el-dropdown-item command="folder">📁 新建文件夹</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
 
     <div class="list-container">
@@ -10,11 +22,8 @@
         @node-click="handleNodeClick">
         <template v-slot="{ node, data }">
           <div class="tree-node-wrapper">
-            <span class="icon">
-              {{ data.type === 'folder' ? '📁' : '📄' }}
-            </span>
+            <span class="icon">{{ data.type === 'folder' ? '📁' : '📄' }}</span>
             <span class="label">{{ node.label }}</span>
-
             <span v-if="data.type === 'file'" class="type-tag" :class="data.isDraft ? 'draft' : 'post'">
               {{ data.isDraft ? '草稿' : '发布' }}
             </span>
@@ -26,20 +35,24 @@
 </template>
 
 <script setup lang="ts">
-// 接收树形数据和加载状态
+import { Plus } from '@element-plus/icons-vue' // 确保安装了 @element-plus/icons-vue
+
 defineProps<{
   treeData: any[]
   loading: boolean
 }>()
 
-const emit = defineEmits(['select', 'create'])
+// 新增指令：通知父组件是想建文件还是文件夹
+const emit = defineEmits(['select', 'create-article', 'create-folder'])
 
-const defaultProps = {
-  children: 'children',
-  label: 'name'
+const handleCommand = (command: string) => {
+  if (command === 'article') {
+    emit('create-article')
+  } else if (command === 'folder') {
+    emit('create-folder')
+  }
 }
 
-// 只有点击文件时才触发选择事件
 const handleNodeClick = (data: any) => {
   if (data.type === 'file') {
     emit('select', data)
