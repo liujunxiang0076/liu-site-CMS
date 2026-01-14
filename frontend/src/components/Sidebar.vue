@@ -3,39 +3,36 @@
     <div class="header">
       <span class="title">文章管理</span>
       <div class="actions">
-        <el-icon @click="emit('create-article')" title="新建文章"><DocumentAdd /></el-icon>
-        <el-icon @click="emit('create-folder')" title="新建文件夹"><FolderAdd /></el-icon>
-        <el-icon @click="emit('refresh')" title="刷新列表"><Refresh /></el-icon>
+        <el-icon @click="emit('create-article')" title="新建文章">
+          <DocumentAdd />
+        </el-icon>
+        <el-icon @click="emit('create-folder')" title="新建文件夹">
+          <FolderAdd />
+        </el-icon>
+        <el-icon @click="emit('refresh')" title="刷新列表">
+          <Refresh />
+        </el-icon>
       </div>
     </div>
 
     <div class="list-container">
-      <el-tree 
-        :data="treeData" 
-        :props="{ label: 'name', children: 'children' }" 
-        highlight-current 
-        node-key="path"
-        :indent="16"
-        @node-click="handleNodeClick" 
-        @node-contextmenu="handleRightClick"
-      >
+      <el-tree :data="treeData" :props="{ label: 'name', children: 'children' }" highlight-current node-key="path"
+        :indent="16" @node-click="handleNodeClick" @node-contextmenu="handleRightClick">
         <template v-slot="{ node, data }">
-          <div class="tree-node-wrapper">
+          <div class="tree-node-wrapper" :class="{ 'is-virtual': data.isVirtual }">
             <template v-if="!data.isEditing">
               <span class="icon">{{ data.type === 'folder' ? '📁' : '📄' }}</span>
               <span class="label" :class="{ 'is-draft': data.isDraft }">{{ node.label }}</span>
               <span v-if="data.isModified" class="unsaved-dot"></span>
+              <el-tag v-if="data.isVirtual" size="small" type="info" effect="plain" class="local-tag">
+                本地
+              </el-tag>
             </template>
 
             <template v-else>
-              <el-input 
-                v-model="data.tempName" 
-                size="small" 
-                class="inline-input"
-                @blur="handleNameConfirm(data)"
-                @keyup.enter="handleNameConfirm(data)"
-                v-focus
-              />
+              <span class="icon">{{ data.type === 'folder' ? '📁' : '📄' }}</span>
+              <el-input v-model="data.tempName" size="small" class="inline-input" @blur="handleNameConfirm(data)"
+                @keyup.enter="handleNameConfirm(data)" v-focus />
             </template>
           </div>
         </template>
@@ -44,10 +41,14 @@
 
     <div v-if="menu.visible" :style="{ top: menu.y + 'px', left: menu.x + 'px' }" class="context-menu">
       <div class="menu-item" @click="handleMenuAction('rename')">
-        <el-icon><Edit /></el-icon> 重命名
+        <el-icon>
+          <Edit />
+        </el-icon> 重命名
       </div>
       <div class="menu-item delete" @click="handleMenuAction('delete')">
-        <el-icon><Delete /></el-icon> 删除
+        <el-icon>
+          <Delete />
+        </el-icon> 删除
       </div>
     </div>
   </div>
@@ -152,7 +153,7 @@ const handleNameConfirm = (data: any) => {
     .actions {
       display: flex;
       gap: 10px;
-      
+
       .el-icon {
         font-size: 16px;
         color: #909399;
@@ -185,7 +186,7 @@ const handleNameConfirm = (data: any) => {
         }
       }
 
-      .el-tree-node.is-current > .el-tree-node__content {
+      .el-tree-node.is-current>.el-tree-node__content {
         background-color: #e7f6ed !important; // 选中的浅绿色
         color: #42b883;
         font-weight: 500;
@@ -208,7 +209,7 @@ const handleNameConfirm = (data: any) => {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        
+
         &.is-draft {
           color: #909399;
           font-style: italic;
@@ -224,11 +225,33 @@ const handleNameConfirm = (data: any) => {
       }
 
       .inline-input {
+        flex: 1;
+
         :deep(.el-input__inner) {
-          height: 24px;
+          height: 22px;
+          line-height: 22px;
           padding: 0 4px;
           font-size: 13px;
+          border-radius: 2px;
         }
+      }
+
+      &.is-virtual {
+        color: #42b883; // 本地文件夹显示为主题绿色
+        font-style: italic; // 斜体表示“未持久化”
+
+        .label {
+          opacity: 0.8;
+        }
+      }
+
+      .local-tag {
+        margin-left: 8px;
+        height: 16px;
+        line-height: 14px;
+        padding: 0 4px;
+        font-size: 10px;
+        transform: scale(0.8);
       }
     }
   }
@@ -240,7 +263,7 @@ const handleNameConfirm = (data: any) => {
     background: #fff;
     border: 1px solid #e4e7ed;
     border-radius: 4px;
-    box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
     padding: 5px 0;
     min-width: 120px;
 
@@ -260,7 +283,10 @@ const handleNameConfirm = (data: any) => {
 
       &.delete {
         color: #f56c6c;
-        &:hover { background-color: #fef0f0; }
+
+        &:hover {
+          background-color: #fef0f0;
+        }
       }
     }
   }
