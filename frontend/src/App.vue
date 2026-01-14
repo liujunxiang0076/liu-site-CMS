@@ -54,6 +54,24 @@ const isModified = computed(() => {
 
 // --- 核心逻辑 ---
 
+/**
+ * 核心修复 1: 确保 getTargetDirPath 能够拿到准确的父级路径
+ */
+const getTargetDirPath = () => {
+  // 1. 如果完全没选，默认根目录
+  if (!selectedNode.value) return 'src/posts'
+  
+  // 2. 如果选中的是文件夹，直接返回该文件夹路径
+  if (selectedNode.value.type === 'folder') {
+    return selectedNode.value.path
+  } 
+  
+  // 3. 如果选中的是文件，提取该文件所在的目录
+  const parts = selectedNode.value.path.split('/')
+  parts.pop() // 移除文件名
+  return parts.join('/')
+}
+
 // 1. 获取文章列表
 const fetchList = async () => {
   isSideLoading.value = true
@@ -67,7 +85,7 @@ const fetchList = async () => {
   }
 }
 
-// 2. 选中节点处理
+// 选中处理：记录当前节点位置
 const handleSelectArticle = async (data: any) => {
   selectedNode.value = data 
   if (data.type !== 'file') return
@@ -84,22 +102,10 @@ const handleSelectArticle = async (data: any) => {
   }
 }
 
-// 3. 智能获取当前目标目录路径 (VS Code 逻辑)
-const getTargetDirPath = () => {
-  // 如果没有选中，或者选中的是根部文件，默认放在 posts 根目录
-  if (!selectedNode.value) return 'src/posts'
-  
-  if (selectedNode.value.type === 'folder') {
-    return selectedNode.value.path
-  } else {
-    // 如果选中的是文件，返回该文件所在的父级目录
-    const pathParts = selectedNode.value.path.split('/')
-    pathParts.pop() // 移除文件名
-    return pathParts.join('/')
-  }
-}
 
-// 4. 新建文章逻辑
+/**
+ * 新建文章
+ */
 const handleNewArticle = async () => {
   try {
     const { value: name } = await ElMessageBox.prompt('请输入文章标题', '新建文章', {
@@ -108,50 +114,66 @@ const handleNewArticle = async () => {
     })
     
     if (name) {
-      const parentPath = getTargetDirPath()
-      const fileName = name.endsWith('.md') ? name : `${name}.md`
-      
+      const parentPath = getTargetDirPath();
+      const fileName = name.endsWith('.md') ? name : `${name}.md`;
+      const fullPath = `${parentPath}/${fileName}`;
+
+      // 1. 设置编辑器为待推送状态
       currentArticle.value = {
-        path: `${parentPath}/${fileName}`,
+        path: fullPath,
         title: name,
-        content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始你的创作...`,
-        sha: "" // 标记为新建
+        content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始创作...`,
+        sha: "" 
       }
       originalContent.value = ""
-      ElMessage.success(`草稿已在目录 [${parentPath}] 下准备就绪`)
+
+      // 2. 构造虚拟节点（用于左侧显示）
+      const newVirtualFile = {
+        name: fileName,
+        path: fullPath,
+        type: 'file',
+        isDraft: true,
+        isVirtual: true // 绿色斜体+本地标识
+      }
+      
+      // 3. 智能插入：如果 parentPath 是根部，直接在最外层找
+      const success = insertNodeToTree(treeData.value, parentPath, newVirtualFile);
+      
+      // 如果递归没找到（比如在根目录下），则直接放最前面
+      if (!success && (parentPath === 'src/posts' || parentPath === 'src')) {
+          treeData.value.unshift(newVirtualFile);
+      }
+
+      ElMessage.success(`草稿已在目录 [${parentPath}] 下创建`);
     }
   } catch (e) {}
 }
 
-// 5. 新建文件夹逻辑 (本地虚拟节点)
+/**
+ * 新建文件夹
+ */
 const handleNewFolder = async () => {
   try {
     const { value: folderName } = await ElMessageBox.prompt('请输入文件夹名称', '新建文件夹')
     if (!folderName) return
 
-    const parentPath = getTargetDirPath()
+    const parentPath = getTargetDirPath();
+    const fullPath = `${parentPath}/${folderName}`;
     
-    // 创建虚拟节点
     const newNode = {
       name: folderName,
-      path: `${parentPath}/${folderName}`,
+      path: fullPath,
       type: 'folder',
       children: [],
-      isVirtual: true // Sidebar 会通过这个字段显示绿色斜体和“本地”标签
+      isVirtual: true 
     }
 
-    // 如果父目录就是根
-    if (parentPath === 'src/posts' || parentPath === 'src/drafts') {
-       // 直接找对应根节点插入
-       const rootFolder = treeData.value.find(n => n.path === parentPath)
-       if(rootFolder) rootFolder.children.unshift(newNode)
-       else treeData.value.unshift(newNode)
-    } else {
-      // 递归寻找并插入
-      insertNodeToTree(treeData.value, parentPath, newNode)
+    const success = insertNodeToTree(treeData.value, parentPath, newNode);
+    if (!success) {
+        treeData.value.unshift(newNode);
     }
     
-    ElMessage.success('临时文件夹已创建（推送文件后将自动同步）')
+    ElMessage.success('本地文件夹已就绪');
   } catch (e) {}
 }
 
@@ -177,15 +199,12 @@ const handleSave = async () => {
     })
 
     if (res.data.status === 'success') {
-      ElMessage.success('GitHub 同步成功')
+      ElMessage.success('同步成功')
       originalContent.value = currentArticle.value.content
-      // 必须刷新列表，让虚拟文件夹变成真实文件夹
+      // 关键：同步成功后重新拉取列表，消除“本地”状态
       await fetchList()
-      
-      // 重新获取详情以拿到最新的 SHA
-      const detailRes = await axios.get('/api/article/detail', {
-        params: { path: currentArticle.value.path }
-      })
+      // 更新 SHA
+      const detailRes = await axios.get('/api/article/detail', { params: { path: currentArticle.value.path } })
       currentArticle.value.sha = detailRes.data.sha
     }
   } catch (err) {
@@ -229,16 +248,30 @@ const handleDelete = async (data: any) => {
 
 // --- 辅助工具函数 ---
 
+/**
+ * 核心修复 2: 完善节点插入逻辑，并确保响应式生效
+ */
 const insertNodeToTree = (nodes: any[], targetPath: string, newNode: any): boolean => {
-  for (const node of nodes) {
+  // 处理特殊情况：直接在根列表插入 (对应 src/posts 或 src/drafts)
+  // 如果 targetPath 就是当前层级某个节点的 path，说明找到了父文件夹
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    
+    // 找到目标文件夹
     if (node.path === targetPath && node.type === 'folder') {
-      if (!node.children) node.children = []
-      node.children.unshift(newNode)
-      return true
+      if (!node.children) node.children = [];
+      node.children.unshift(newNode);
+      // 关键：强制触发 Vue 对 treeData 的深度更新
+      treeData.value = [...treeData.value]; 
+      return true;
     }
-    if (node.children && insertNodeToTree(node.children, targetPath, newNode)) return true
+    
+    // 递归查找子目录
+    if (node.children && node.children.length > 0) {
+      if (insertNodeToTree(node.children, targetPath, newNode)) return true;
+    }
   }
-  return false
+  return false;
 }
 
 onMounted(fetchList)
