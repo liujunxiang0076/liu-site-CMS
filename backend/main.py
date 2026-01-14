@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 from dotenv import load_dotenv
 import base64
+import datetime # 确保导入了 datetime，修复你代码中的潜在错误
 
 # 导入你自定义的工具类
 from core.github_client import GitHubClient
@@ -98,22 +99,34 @@ def get_article_detail(path: str):
 @app.post("/api/article/save")
 def save_to_github(item: SaveArticleRequest):
     try:
-        # 逻辑：如果有输入则用输入，没输入则系统自动生成
+        # 1. 自动生成提交信息
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         default_msg = f"CMS Update: {os.path.basename(item.path)} ({now})"
-        
         final_msg = item.message.strip() if item.message and item.message.strip() else default_msg
 
-        client.repo.update_file(
-            path=item.path,
-            message=final_msg,
-            content=item.content,
-            sha=item.sha,
-            branch="main"
-        )
+        # 2. 准备基础参数
+        params = {
+            "path": item.path,
+            "message": final_msg,
+            "content": item.content,
+            "branch": "main"
+        }
+
+        # 3. 核心修复：区分新建还是更新
+        # 如果 item.sha 为空字符串或 "new"，执行新建逻辑
+        if not item.sha or item.sha == "new":
+            print(f"执行新建文件: {item.path}")
+            client.repo.create_file(**params)
+        else:
+            # 执行更新逻辑，必须包含 sha
+            params["sha"] = item.sha
+            print(f"执行更新文件: {item.path}")
+            client.repo.update_file(**params)
+
         return {"status": "success"}
     except Exception as e:
         print(f"GitHub 保存报错: {str(e)}")
+        # 将具体错误返回给前端，方便排查是权限问题还是网络问题
         raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
 
 if __name__ == "__main__":
