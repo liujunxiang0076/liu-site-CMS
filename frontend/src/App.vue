@@ -25,7 +25,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Sidebar from './components/Sidebar.vue'
 import { MdEditor } from 'md-editor-v3';
@@ -37,8 +36,8 @@ import { articleApi } from '@/api/article'
 const treeData = ref<any[]>([])
 const isSideLoading = ref(false)
 const isContentLoading = ref(false)
-const isSaving = ref(false) 
-const originalContent = ref('') 
+const isSaving = ref(false)
+const originalContent = ref('')
 const selectedNode = ref<any>(null) // 统一记录当前选中的节点
 
 const currentArticle = ref<{
@@ -62,12 +61,12 @@ const isModified = computed(() => {
 const getTargetDirPath = () => {
   // 1. 如果完全没选，默认根目录
   if (!selectedNode.value) return 'src/posts'
-  
+
   // 2. 如果选中的是文件夹，直接返回该文件夹路径
   if (selectedNode.value.type === 'folder') {
     return selectedNode.value.path
-  } 
-  
+  }
+
   // 3. 如果选中的是文件，提取该文件所在的目录
   const parts = selectedNode.value.path.split('/')
   parts.pop() // 移除文件名
@@ -80,7 +79,7 @@ const fetchList = async () => {
   try {
     // 此时 res 直接就是后端返回的数据，因为 client.ts 做了拦截处理
     const res = await articleApi.getList()
-    treeData.value = res.data 
+    treeData.value = res.data
   } finally {
     isSideLoading.value = false
   }
@@ -88,9 +87,9 @@ const fetchList = async () => {
 
 // 选中处理：记录当前节点位置
 const handleSelectArticle = async (data: any) => {
-  selectedNode.value = data 
+  selectedNode.value = data
   if (data.type !== 'file') return
-  
+
   isContentLoading.value = true
   try {
     const res = await articleApi.getDetail(data.path)
@@ -113,7 +112,7 @@ const handleNewArticle = async () => {
       inputPattern: /\S+/,
       inputErrorMessage: '标题不能为空'
     })
-    
+
     if (name) {
       const parentPath = getTargetDirPath();
       const fileName = name.endsWith('.md') ? name : `${name}.md`;
@@ -124,7 +123,7 @@ const handleNewArticle = async () => {
         path: fullPath,
         title: name,
         content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始创作...`,
-        sha: "" 
+        sha: ""
       }
       originalContent.value = ""
 
@@ -136,18 +135,18 @@ const handleNewArticle = async () => {
         isDraft: true,
         isVirtual: true // 绿色斜体+本地标识
       }
-      
+
       // 3. 智能插入：如果 parentPath 是根部，直接在最外层找
       const success = insertNodeToTree(treeData.value, parentPath, newVirtualFile);
-      
+
       // 如果递归没找到（比如在根目录下），则直接放最前面
       if (!success && (parentPath === 'src/posts' || parentPath === 'src')) {
-          treeData.value.unshift(newVirtualFile);
+        treeData.value.unshift(newVirtualFile);
       }
 
       ElMessage.success(`草稿已在目录 [${parentPath}] 下创建`);
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 /**
@@ -160,22 +159,22 @@ const handleNewFolder = async () => {
 
     const parentPath = getTargetDirPath();
     const fullPath = `${parentPath}/${folderName}`;
-    
+
     const newNode = {
       name: folderName,
       path: fullPath,
       type: 'folder',
       children: [],
-      isVirtual: true 
+      isVirtual: true
     }
 
     const success = insertNodeToTree(treeData.value, parentPath, newNode);
     if (!success) {
-        treeData.value.unshift(newNode);
+      treeData.value.unshift(newNode);
     }
-    
+
     ElMessage.success('本地文件夹已就绪');
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // 6. 保存/推送文章
@@ -185,10 +184,10 @@ const handleSave = async () => {
   try {
     const { value: userInputMsg } = await ElMessageBox.prompt(
       '请输入推送备注', '确认推送至 GitHub', {
-        confirmButtonText: '确定推送',
-        cancelButtonText: '取消',
-        inputPlaceholder: '系统将自动生成默认备注...'
-      }
+      confirmButtonText: '确定推送',
+      cancelButtonText: '取消',
+      inputPlaceholder: '系统将自动生成默认备注...'
+    }
     )
 
     isSaving.value = true
@@ -238,7 +237,7 @@ const handleDelete = async (data: any) => {
     ElMessage.success('文件已从 GitHub 删除')
     if (currentArticle.value?.path === data.path) currentArticle.value = null
     await fetchList()
-  } catch (e) {} finally {
+  } catch (e) { } finally {
     isSideLoading.value = false
   }
 }
@@ -253,16 +252,16 @@ const insertNodeToTree = (nodes: any[], targetPath: string, newNode: any): boole
   // 如果 targetPath 就是当前层级某个节点的 path，说明找到了父文件夹
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
-    
+
     // 找到目标文件夹
     if (node.path === targetPath && node.type === 'folder') {
       if (!node.children) node.children = [];
       node.children.unshift(newNode);
       // 关键：强制触发 Vue 对 treeData 的深度更新
-      treeData.value = [...treeData.value]; 
+      treeData.value = [...treeData.value];
       return true;
     }
-    
+
     // 递归查找子目录
     if (node.children && node.children.length > 0) {
       if (insertNodeToTree(node.children, targetPath, newNode)) return true;

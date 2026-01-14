@@ -32,11 +32,12 @@ export default defineConfig({
     }
   },
   server: {
-    port: 3000,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true
+        target: 'http://127.0.0.1:8000', // 后端地址
+        changeOrigin: true,
+        // 如果后端接口本身不带 /api 前缀，需要重写路径
+        // rewrite: (path) => path.replace(/^\/api/, '') 
       }
     }
   }
