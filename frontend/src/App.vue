@@ -352,7 +352,7 @@ const handleNewArticle = async () => {
         id: newId,
         path: fullPath,
         title: name.replace(/\.md$/, ''),
-        content: `---\ntitle: ${name.replace(/\.md$/, '')}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始创作...`,
+        content: `---\ntitle: ${name.replace(/\.md$/, '')}\ntags: []\ncategories: []\ndate: ${new Date().toISOString().split('T')[0]}\ndescription: \ncover: \n---\n\n开始创作...`,
         sha: "",
         isSynced: false,
         isLocal: true
