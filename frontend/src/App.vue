@@ -7,13 +7,17 @@
       <div v-if="currentArticle" class="editor-container">
         <div class="editor-header">
           <span class="path-tag" :class="articleStatus">{{ currentArticle.path }}</span>
-          <el-button type="primary" :loading="isSaving" @click="handleSave" :disabled="!isModified">
-            {{ isSaving ? '同步中...' : '推送至 GitHub' }}
-          </el-button>
+          <div class="header-actions">
+            <span v-if="autoSaveStatus" class="autosave-status">{{ autoSaveStatus }}</span>
+            <el-button type="primary" :loading="isSaving" @click="handleSave" :disabled="!isModified">
+              {{ isSaving ? '同步中...' : '推送至 GitHub' }}
+            </el-button>
+          </div>
         </div>
 
         <MdEditor v-model="currentArticle.content" editor-id="my-editor" class="pro-editor"
-          placeholder="开始你的 Typora 式体验..." :no-front-matter="true" @onSave="handleSave" />
+          placeholder="开始你的 Typora 式体验..." :no-front-matter="true" 
+          @onSave="handleSave" @onUploadImg="handleUploadImg" />
       </div>
 
       <div v-else class="empty-state">
@@ -24,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Sidebar from './components/Sidebar.vue'
 import { MdEditor } from 'md-editor-v3';
@@ -40,6 +44,7 @@ const isSaving = ref(false)
 const originalContent = ref('')
 const localSavedContent = ref('') // 新增：本地保存的内容快照
 const selectedNode = ref<any>(null) // 统一记录当前选中的节点
+const autoSaveStatus = ref('') // 自动保存状态提示
 
 const currentArticle = ref<{
   path: string;
@@ -48,6 +53,30 @@ const currentArticle = ref<{
   sha: string;
   isSynced?: boolean; // 新增：标识是否来自同步源
 } | null>(null)
+
+// 自动保存逻辑
+let autoSaveTimer: any = null
+const DRAFT_KEY_PREFIX = 'cms_draft_'
+
+// 监听内容变化进行自动保存
+watch(() => currentArticle.value?.content, (newVal, oldVal) => {
+  if (!currentArticle.value || newVal === oldVal) return
+  
+  // 清除旧定时器
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  
+  autoSaveStatus.value = '输入中...'
+  
+  // 防抖 1秒
+  autoSaveTimer = setTimeout(() => {
+    if (currentArticle.value) {
+      const key = DRAFT_KEY_PREFIX + currentArticle.value.path
+      localStorage.setItem(key, newVal || '')
+      autoSaveStatus.value = '已自动保存到本地'
+      setTimeout(() => { autoSaveStatus.value = '' }, 2000)
+    }
+  }, 1000)
+})
 
 // 计算属性：判断内容是否被修改
 const isModified = computed(() => {
@@ -153,6 +182,40 @@ const handleSelectArticle = async (data: any) => {
 
 
 /**
+ * 图片上传处理
+ */
+const handleUploadImg = async (files: File[], callback: (urls: string[]) => void) => {
+  const res = await Promise.all(
+    files.map(async (file) => {
+      // 1. 前端基础校验
+      if (file.size > 5 * 1024 * 1024) {
+        ElMessage.warning(`文件 ${file.name} 超过 5MB，已跳过`)
+        return null
+      }
+      
+      const form = new FormData()
+      form.append('file', file)
+
+      try {
+        const { data } = await articleApi.uploadImage(form)
+        return data.url
+      } catch (error) {
+        ElMessage.error(`图片 ${file.name} 上传失败`)
+        return null
+      }
+    })
+  )
+
+  // 过滤失败的请求
+  const urls = res.filter((url): url is string => !!url)
+  if (urls.length > 0) {
+    callback(urls)
+    ElMessage.success(`成功上传 ${urls.length} 张图片`)
+  }
+}
+
+
+/**
  * 新建文章
  */
 const handleNewArticle = async () => {
@@ -231,6 +294,33 @@ const handleNewFolder = async () => {
 // 6. 保存/推送文章
 const handleSave = async () => {
   if (!currentArticle.value || isSaving.value || !isModified.value) return
+
+  const content = currentArticle.value.content
+  // 简单检查 Frontmatter (可选，根据严格程度)
+  const hasFrontmatter = content.startsWith('---')
+  const hasTitle = /^title:\s+.+/m.test(content)
+  const hasCategory = /^categories:\s*/m.test(content)
+
+  if (!hasFrontmatter || !hasTitle || !hasCategory) {
+    const missing = []
+    if (!hasFrontmatter) missing.push('Frontmatter 头部')
+    if (!hasTitle) missing.push('文章标题 (title)')
+    if (!hasCategory) missing.push('文章分类 (categories)')
+
+    try {
+      await ElMessageBox.confirm(
+        `检测到以下关键信息缺失：${missing.join('、')}。\n这可能导致博客列表渲染异常。是否强制保存？`,
+        '格式警告',
+        {
+          confirmButtonText: '强制保存',
+          cancelButtonText: '返回修改',
+          type: 'warning'
+        }
+      )
+    } catch {
+      return
+    }
+  }
 
   try {
     const { value: userInputMsg } = await ElMessageBox.prompt(
@@ -358,6 +448,17 @@ onMounted(fetchList)
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0; // 确保头部不会被压缩
+
+        .header-actions {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          
+          .autosave-status {
+            font-size: 12px;
+            color: #999;
+          }
+        }
 
         .path-tag {
           font-size: 13px;
