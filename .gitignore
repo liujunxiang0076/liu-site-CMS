@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 .env
 venv/
-
+backend.log
 # Node
 node_modules/
 dist/
