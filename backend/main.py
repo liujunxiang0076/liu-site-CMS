@@ -100,6 +100,7 @@ def get_articles():
         # 返回标准成功结构，携带数据总量
         return success(data=final_list, total=len(final_list))
     except Exception as e:
+        logger.error(f"获取文章列表失败: {str(e)}", exc_info=True)
         return fail(msg=f"获取文章列表失败: {str(e)}", code=Code.INTERNAL_ERROR)
 
 @app.get("/api/article/detail")
@@ -115,11 +116,18 @@ def get_article_detail(path: str):
             "content": raw_content,
         }, sha=content_file.sha)
     except Exception as e:
+        logger.error(f"读取文件内容失败: {path} - {str(e)}", exc_info=True)
         return fail(msg=f"读取文件内容失败: {path}", code=Code.NOT_FOUND)
 
 @app.post("/api/article/save")
 def save_to_github(item: SaveArticleRequest):
     try:
+        # 1. 基础验证
+        if not item.path:
+            return fail(msg="文件路径不能为空", code=Code.PARAM_ERROR)
+        if not item.content:
+            return fail(msg="文件内容不能为空", code=Code.PARAM_ERROR)
+
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         default_msg = f"CMS Update: {os.path.basename(item.path)} ({now})"
         final_msg = item.message.strip() if item.message and item.message.strip() else default_msg
@@ -133,21 +141,54 @@ def save_to_github(item: SaveArticleRequest):
 
         # 判断新建还是更新
         if not item.sha or item.sha in ["", "new"]:
+            logger.info(f"正在新建文件: {item.path}")
             res = client.repo.create_file(**params)
             action = "创建"
         else:
+            logger.info(f"正在更新文件: {item.path} (SHA: {item.sha})")
             params["sha"] = item.sha
             res = client.repo.update_file(**params)
             action = "更新"
             
         # 核心：必须返回新的 SHA，否则前端无法连续保存
         new_sha = res['content'].sha
+        logger.info(f"文件{action}成功: {item.path}, New SHA: {new_sha}")
         return success(msg=f"文件{action}成功", sha=new_sha)
     except Exception as e:
+        logger.error(f"保存失败: {str(e)}", exc_info=True)
         # 处理常见错误：SHA 冲突
         if "does not match" in str(e):
             return fail(msg="保存失败：GitHub 版本冲突，请刷新页面重新编辑", code=Code.GITHUB_ERROR)
         return fail(msg=f"保存失败: {str(e)}", code=Code.INTERNAL_ERROR)
+
+# 新增：图片上传接口
+@app.post("/api/upload/image")
+async def upload_image(file: UploadFile = File(...)):
+    try:
+        # 1. 验证文件类型
+        if not file.content_type.startswith("image/"):
+            return fail(msg="仅支持上传图片文件", code=Code.PARAM_ERROR)
+        
+        # 2. 验证文件大小 (例如限制 5MB)
+        # 注意：UploadFile 是流式读取，直接读取大小可能不准，这里简单跳过或在读取时判断
+        # content = await file.read()
+        # if len(content) > 5 * 1024 * 1024:
+        #     return fail(msg="图片大小不能超过 5MB", code=Code.PARAM_ERROR)
+        # await file.seek(0) # 重置指针
+
+        logger.info(f"开始上传图片: {file.filename}")
+        url = await uploader.upload_image(file)
+        
+        if url:
+            logger.info(f"图片上传成功: {url}")
+            return success(data={"url": url})
+        else:
+            logger.error("图片上传失败: 图床服务返回空 URL")
+            return fail(msg="图片上传失败，请检查图床配置", code=Code.INTERNAL_ERROR)
+    except Exception as e:
+        logger.error(f"图片上传异常: {str(e)}", exc_info=True)
+        return fail(msg=f"图片上传异常: {str(e)}", code=Code.INTERNAL_ERROR)
+
 
 # 新增：删除接口
 @app.post("/api/article/delete")
