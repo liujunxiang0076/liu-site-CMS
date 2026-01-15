@@ -1,12 +1,13 @@
 import os
 import datetime
 import base64
-from fastapi import FastAPI, HTTPException
+import logging
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from dotenv import load_dotenv
-from core.response import success, fail
+from core.response import success, fail, Code
 
 # 导入自定义工具类
 from core.github_client import GitHubClient
@@ -14,6 +15,17 @@ from core.image_uploader import TelegramUploader
 
 # 1. 加载配置
 load_dotenv()
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("backend.log", encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("CMS-Backend")
 
 # 2. 实例化 FastAPI
 app = FastAPI()
