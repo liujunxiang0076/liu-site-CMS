@@ -36,6 +36,7 @@ import 'md-editor-v3/lib/style.css';
 import { articleApi } from '@/api/article'
 import { v4 as uuidv4 } from 'uuid';
 import * as storage from '@/utils/storage';
+import { resolveTargetDir } from '@/utils/path';
 
 
 // --- 状态定义 ---

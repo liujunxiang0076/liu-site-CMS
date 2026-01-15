@@ -109,9 +109,8 @@ const vFocus = {
 // 处理节点点击
 const handleNodeClick = (data: any) => {
   menu.visible = false
-  if (data.type === 'file') {
-    emit('select', data)
-  }
+  // 无论是文件还是文件夹，都触发 select 事件，以便父组件知道当前选中项
+  emit('select', data)
 }
 
 // 触发右键菜单
