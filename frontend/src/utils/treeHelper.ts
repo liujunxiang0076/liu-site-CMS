@@ -34,3 +34,32 @@ export const getChildrenByPath = (nodes: any[], path: string): any[] => {
   }
   return [];
 };
+
+/**
+ * Removes a node from the tree by ID or Path.
+ * Returns true if removed, false otherwise.
+ */
+export const removeNodeFromTree = (nodes: any[], identifier: { id?: string, path?: string }): boolean => {
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    
+    // Check match:
+    // 1. If ID is provided, strictly match by ID (for local drafts)
+    // 2. If no ID provided, match by Path (for remote files)
+    // 3. Fallback: if node has ID but we only have path, still check path just in case
+    const match = (identifier.id && node.id === identifier.id) || 
+                  (identifier.path && node.path === identifier.path);
+    
+    if (match) {
+      nodes.splice(i, 1);
+      return true;
+    }
+
+    if (node.children && node.children.length > 0) {
+      if (removeNodeFromTree(node.children, identifier)) {
+        return true;
+      }
+    }
+  }
+  return false;
+};

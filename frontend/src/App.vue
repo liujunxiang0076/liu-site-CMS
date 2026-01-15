@@ -38,7 +38,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as storage from '@/utils/storage';
 import { resolveTargetDir } from '@/utils/path';
 import { getNextSequence, sortNodes } from '@/utils/fileNaming';
-import { getChildrenByPath, findNodeByPath } from '@/utils/treeHelper';
+import { getChildrenByPath, findNodeByPath, removeNodeFromTree } from '@/utils/treeHelper';
 
 
 const sidebarRef = ref()
@@ -590,8 +590,12 @@ const handleDelete = async (data: any) => {
       ElMessage.success('文件已从 GitHub 删除')
     }
     
+    // 核心修改：手动从树中移除节点，而不是重新拉取列表
+    // 这样既能保持文件夹展开状态，又能避免本地草稿丢失
+    removeNodeFromTree(treeData.value, { id: data.id, path: data.path });
+    
     if (currentArticle.value?.path === data.path) currentArticle.value = null
-    await fetchList()
+    // await fetchList() // 移除此行，避免全量刷新
   } catch (e) { } finally {
     isSideLoading.value = false
   }
