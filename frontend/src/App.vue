@@ -167,6 +167,32 @@ const getTargetDirPath = () => {
   return parts.join('/')
 }
 
+/**
+ * 检查文件名是否重复
+ */
+const checkDuplicateName = (parentPath: string, fileName: string): boolean => {
+  // 递归查找目标文件夹节点
+  const findFolder = (nodes: any[]): any[] | null => {
+    for (const node of nodes) {
+      if (node.path === parentPath && node.type === 'folder') {
+        return node.children || []
+      }
+      if (node.children) {
+        const res = findFolder(node.children)
+        if (res) return res
+      }
+    }
+    // 特殊情况：如果是根目录 src/posts，可能直接就是 treeData
+    if (parentPath === 'src/posts' || parentPath === 'src') return nodes
+    return null
+  }
+
+  const siblings = findFolder(treeData.value)
+  if (!siblings) return false
+
+  return siblings.some((node: any) => node.name === fileName)
+}
+
 // 1. 获取文章列表
 const fetchList = async () => {
   isSideLoading.value = true
@@ -511,8 +537,16 @@ const handleDelete = async (data: any) => {
   try {
     await ElMessageBox.confirm(`确定要删除 ${data.name} 吗？`, '警告', { type: 'warning' })
     isSideLoading.value = true
-    await articleApi.delete(data.path, data.sha)
-    ElMessage.success('文件已从 GitHub 删除')
+    
+    // 分支处理：本地文章 vs 远程文章
+    if (data.isLocal && data.id) {
+      await storage.removeLocalArticle(data.id)
+      ElMessage.success('草稿已删除')
+    } else {
+      await articleApi.delete(data.path, data.sha)
+      ElMessage.success('文件已从 GitHub 删除')
+    }
+    
     if (currentArticle.value?.path === data.path) currentArticle.value = null
     await fetchList()
   } catch (e) { } finally {
