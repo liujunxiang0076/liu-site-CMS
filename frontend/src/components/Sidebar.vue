@@ -10,7 +10,12 @@
 
     <div class="sidebar-content" v-show="!isCollapsed" @click="handleBackgroundClick">
       <div class="header">
-        <span class="title">文章管理</span>
+        <span class="title">
+          文章管理
+          <el-tooltip content="数据来自本地缓存" placement="top" v-if="isFromCache">
+             <span class="cache-dot"></span>
+          </el-tooltip>
+        </span>
         <div class="actions">
           <el-icon @click="emit('create-article')" title="新建文章">
             <DocumentAdd />
@@ -86,6 +91,7 @@ const isCollapsed = ref(false)
 defineProps<{
   treeData: any[]
   loading: boolean
+  isFromCache?: boolean
 }>()
 
 // 定义事件
@@ -281,6 +287,17 @@ const handleNameConfirm = (data: any) => {
       color: #666;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      .cache-dot {
+        width: 6px;
+        height: 6px;
+        background-color: #909399;
+        border-radius: 50%;
+        display: inline-block;
+      }
     }
 
     .actions {

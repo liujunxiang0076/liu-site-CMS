@@ -1,7 +1,7 @@
 <template>
   <div class="cms-layout">
-    <Sidebar ref="sidebarRef" :tree-data="treeData" :loading="isSideLoading" @select="handleSelectArticle"
-      @create-article="handleNewArticle" @create-folder="handleNewFolder" @refresh="fetchList" @rename="handleRename"
+    <Sidebar ref="sidebarRef" :tree-data="treeData" :loading="isSideLoading" :is-from-cache="isDataFromCache" @select="handleSelectArticle"
+      @create-article="handleNewArticle" @create-folder="handleNewFolder" @refresh="() => fetchList(true)" @rename="handleRename"
       @delete="handleDelete" @clear-selection="handleClearSelection" />
     <main class="main-content" v-loading="isContentLoading">
       <div v-if="currentArticle" class="editor-container">
@@ -46,6 +46,7 @@ const sidebarRef = ref()
 // --- 状态定义 ---
 const treeData = ref<any[]>([])
 const isSideLoading = ref(false)
+const isDataFromCache = ref(false)
 const isContentLoading = ref(false)
 const isSaving = ref(false)
 const originalContent = ref('')
@@ -181,12 +182,17 @@ const checkDuplicateName = (parentPath: string, fileName: string): boolean => {
 }
 
 // 1. 获取文章列表
-const fetchList = async () => {
+const fetchList = async (forceRefresh: any = false) => {
+  // 确保 forceRefresh 是布尔值
+  const isForce = typeof forceRefresh === 'boolean' ? forceRefresh : false;
+  
   isSideLoading.value = true
   try {
     // 此时 res 直接就是后端返回的数据，因为 client.ts 做了拦截处理
-    const res = await articleApi.getList()
+    const res = await articleApi.getList(isForce)
     treeData.value = res.data
+    // @ts-ignore
+    isDataFromCache.value = !!res.fromCache
   } finally {
     isSideLoading.value = false
   }
@@ -247,8 +253,8 @@ const handleSelectArticle = async (data: any) => {
     const res = await articleApi.getDetail(data.path)
     // 修复：手动合并 SHA，因为后端将其放在顶层而非 data 中
     currentArticle.value = {
-      ...res.data,
-      sha: res.sha ?? '',
+...(res as any).data,
+      sha: (res as any).sha ?? '',
       isSynced: true, // 明确标记为同步源文章
       isLocal: false
     }
@@ -256,14 +262,16 @@ const handleSelectArticle = async (data: any) => {
     // 检查是否有未保存的草稿 (localStorage)
     const draftKey = 'cms_draft_' + data.path
     const draftContent = localStorage.getItem(draftKey)
-    if (draftContent && draftContent !== res.data.content) {
+    if (draftContent && draftContent !== (res as any).content) {
       try {
         await ElMessageBox.confirm('检测到本地有未保存的草稿，是否恢复？', '恢复草稿', {
           confirmButtonText: '恢复草稿',
           cancelButtonText: '丢弃',
           type: 'info'
         })
-        currentArticle.value.content = draftContent
+        if (currentArticle.value) {
+          currentArticle.value.content = draftContent
+        }
         ElMessage.success('已恢复本地草稿')
       } catch {
         // 丢弃草稿
@@ -271,8 +279,8 @@ const handleSelectArticle = async (data: any) => {
       }
     }
 
-    originalContent.value = res.data.content
-    localSavedContent.value = res.data.content
+    originalContent.value = (res as any).content
+    localSavedContent.value = (res as any).content
   } catch (err) {
     ElMessage.error('读取内容失败')
   } finally {
@@ -507,11 +515,11 @@ const handleSave = async () => {
     if (currentArticle.value.isLocal) {
       // 尝试获取远程文件信息，看是否已存在
       try {
-        const remoteRes = await articleApi.getDetail(currentArticle.value.path, { skipErrorHandle: true })
+        const remoteRes = await articleApi.getDetail(currentArticle.value.path, true)
         // 如果能获取到，说明远程已存在
         try {
            await ElMessageBox.confirm(
-             `云端已存在同名文件${remoteRes.sha ? ` (SHA: ${remoteRes.sha.substring(0,7)})` : ''}，继续保存将覆盖云端内容。`,
+             `云端已存在同名文件${(remoteRes as any).sha ? ` (SHA: ${(remoteRes as any).sha.substring(0,7)})` : ''}，继续保存将覆盖云端内容。`,
              '版本冲突',
              {
                confirmButtonText: '覆盖保存',
@@ -519,10 +527,10 @@ const handleSave = async () => {
                type: 'warning'
              }
            )
-           finalSha = remoteRes.sha ?? '' // 使用远程 SHA 进行覆盖
+           finalSha = (remoteRes as any).sha ?? '' // 使用远程 SHA 进行覆盖
         } catch {
            isSaving.value = false
-           return // 用户取消
+           return // 用户取消覆盖，退出保存流程
         }
       } catch (e) {
         // 获取失败通常说明文件不存在（404），这是正常的“新建”流程
@@ -561,7 +569,7 @@ const handleSave = async () => {
       }
       
       // 更新 SHA 和同步状态
-      currentArticle.value.sha = res.sha ?? ''
+      currentArticle.value.sha = (res as any).sha ?? ''
       currentArticle.value.isSynced = true
       currentArticle.value.isLocal = false
       currentArticle.value.id = undefined
@@ -662,7 +670,14 @@ const insertNodeToTree = (nodes: any[], targetPath: string, newNode: any): boole
   return false;
 }
 
-onMounted(fetchList)
+onMounted(() => {
+  fetchList()
+  
+  // 定时自动刷新 (每5分钟)
+  setInterval(() => {
+    fetchList()
+  }, 5 * 60 * 1000)
+})
 </script>
 
 <style lang="scss" scoped>
