@@ -590,17 +590,26 @@ const handleDelete = async (data: any) => {
       isSideLoading.value = true
       await storage.removeLocalArticle(data.id)
       ElMessage.success('草稿已删除')
+    } else if (data.isVirtual) {
+      // 纯虚拟节点 (例如新建的文件夹)，无需后端交互，直接移除
+      ElMessage.success('已删除')
     } else {
-      const { value: userInputMsg } = await ElMessageBox.prompt(
-        '请输入Git提交备注', '确认删除', {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        inputPlaceholder: `Delete ${data.name}`
-      })
+      let userInputMsg = undefined;
+
+      // 只有远程文件需要输入备注，文件夹不需要
+      if (data.type === 'file') {
+        const { value } = await ElMessageBox.prompt(
+          '请输入Git提交备注', '确认删除', {
+          confirmButtonText: '确定删除',
+          cancelButtonText: '取消',
+          inputPlaceholder: `Delete ${data.name}`
+        })
+        userInputMsg = value;
+      }
       
       isSideLoading.value = true
       await articleApi.delete(data.path, data.sha, userInputMsg)
-      ElMessage.success('文件已从 GitHub 删除')
+      ElMessage.success(data.type === 'folder' ? '文件夹已删除' : '文件已从 GitHub 删除')
     }
     
     // 核心修改：手动从树中移除节点，而不是重新拉取列表
