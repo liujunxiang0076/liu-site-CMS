@@ -37,6 +37,8 @@ import { articleApi } from '@/api/article'
 import { v4 as uuidv4 } from 'uuid';
 import * as storage from '@/utils/storage';
 import { resolveTargetDir } from '@/utils/path';
+import { getNextSequence, sortNodes } from '@/utils/fileNaming';
+import { getChildrenByPath, findNodeByPath } from '@/utils/treeHelper';
 
 
 const sidebarRef = ref()
@@ -314,24 +316,43 @@ const handleUploadImg = async (files: File[], callback: (urls: string[]) => void
  */
 const handleNewArticle = async () => {
   try {
+    const parentPath = resolveTargetDir(selectedNode.value);
+    
+    // 1. 计算自动序号
+    const siblings = getChildrenByPath(treeData.value, parentPath);
+    const existingNames = siblings.map((n: any) => n.name);
+    const nextSeq = getNextSequence(existingNames);
+    
+    if (nextSeq === null) {
+      ElMessage.warning('该目录下文件序号已达上限 (99)，无法自动生成');
+      return;
+    }
+
+    // 2. 弹出输入框，预填序号
     const { value: name } = await ElMessageBox.prompt('请输入文章标题', '新建文章', {
       inputPattern: /\S+/,
-      inputErrorMessage: '标题不能为空'
+      inputErrorMessage: '标题不能为空',
+      inputValue: `${nextSeq}_`
     })
 
     if (name) {
-      // 使用新的路径解析逻辑
-      const parentPath = resolveTargetDir(selectedNode.value);
       const fileName = name.endsWith('.md') ? name : `${name}.md`;
       const fullPath = `${parentPath}/${fileName}`;
+      
+      // 检查重名 (使用现有列表)
+      if (existingNames.includes(fileName)) {
+        ElMessage.error('该目录下已存在同名文件');
+        return;
+      }
+
       const newId = uuidv4(); // 生成唯一ID
 
-      // 1. 设置编辑器为待推送状态
+      // 3. 设置编辑器为待推送状态
       currentArticle.value = {
         id: newId,
         path: fullPath,
-        title: name,
-        content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始创作...`,
+        title: name.replace(/\.md$/, ''),
+        content: `---\ntitle: ${name.replace(/\.md$/, '')}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始创作...`,
         sha: "",
         isSynced: false,
         isLocal: true
@@ -339,33 +360,42 @@ const handleNewArticle = async () => {
       originalContent.value = ""
       localSavedContent.value = ""
 
-      // 立即保存到本地存储，确保点击节点时能读取到
+      // 立即保存到本地存储
       await storage.saveLocalArticle({
         id: newId,
-        title: name,
+        title: currentArticle.value.title,
         content: currentArticle.value.content,
         path: fullPath,
         updatedAt: Date.now(),
         isSynced: false
       });
 
-      // 2. 构造虚拟节点（用于左侧显示）
+      // 4. 构造虚拟节点
       const newVirtualFile = {
-        id: newId, // 绑定 ID
+        id: newId,
         name: fileName,
         path: fullPath,
         type: 'file',
         isDraft: true,
-        isVirtual: true, // 绿色斜体+本地标识
+        isVirtual: true,
         isLocal: true
       }
 
-      // 3. 智能插入：如果 parentPath 是根部，直接在最外层找
-      const success = insertNodeToTree(treeData.value, parentPath, newVirtualFile);
-
-      // 如果递归没找到（比如在根目录下），则直接放最前面
-      if (!success && (parentPath === 'src/posts' || parentPath === 'src')) {
-        treeData.value.unshift(newVirtualFile);
+      // 5. 插入并排序
+      const parentNode = findNodeByPath(treeData.value, parentPath);
+      
+      if (Array.isArray(parentNode)) {
+         // 根目录
+         parentNode.push(newVirtualFile);
+         treeData.value = sortNodes(parentNode);
+      } else if (parentNode) {
+         // 文件夹
+         if (!parentNode.children) parentNode.children = [];
+         parentNode.children.push(newVirtualFile);
+         parentNode.children = sortNodes(parentNode.children);
+      } else {
+         // 兜底：如果找不到父节点（理论上不应发生），回退到旧逻辑
+         treeData.value.unshift(newVirtualFile);
       }
       
       // 展开父文件夹
@@ -375,7 +405,9 @@ const handleNewArticle = async () => {
 
       ElMessage.success(`草稿已在目录 [${parentPath}] 下创建`);
     }
-  } catch (e) { }
+  } catch (e) { 
+    if (e !== 'cancel') console.error(e);
+  }
 }
 
 /**
