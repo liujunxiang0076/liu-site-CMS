@@ -2,9 +2,21 @@
 
 本指南介绍如何通过 Docker 镜像进行发布和更新。
 
-## 1. 准备工作 (本地开发环境)
+## 1. 准备工作
 
-### 1.1 配置镜像地址
+### 方式一：使用 GitHub Actions 自动构建 (推荐)
+如果你本地没有安装 Docker，或者希望自动化发布，可以使用 GitHub Actions。
+
+1.  将代码推送到 GitHub。
+2.  在 GitHub 仓库设置中 (Settings -> Secrets and variables -> Actions)，添加以下 Secrets：
+    *   `DOCKER_USERNAME`: 你的 Docker Hub 用户名
+    *   `DOCKER_PASSWORD`: 你的 Docker Hub 密码 (或 Access Token)
+3.  每次推送到 `main` 分支时，GitHub 会自动构建镜像并推送到 Docker Hub。
+
+### 方式二：本地手动构建
+如果你想在本地手动构建：
+
+#### 1.1 配置镜像地址
 修改项目根目录下的 `.env.docker` 文件，填入你的 Docker Hub 用户名或镜像仓库地址。
 
 ```ini
