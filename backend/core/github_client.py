@@ -34,11 +34,6 @@ class GitHubClient:
             logger.error(f"Failed to connect to GitHub repo: {e}")
             raise e
 
-    def get_git_tree(self, branch: str = "main", recursive: bool = True):
-        """获取 Git Tree (用于获取文件列表)"""
-        sha = self.repo.get_branch(branch).commit.sha
-        return self.repo.get_git_tree(sha, recursive=recursive)
-
     def get_file_content(self, path: str):
         """读取文件内容和 SHA"""
         content_file = self.repo.get_contents(path)
