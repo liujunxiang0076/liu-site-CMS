@@ -1,52 +1,62 @@
-# 部署指南
+# 部署指南 (镜像版)
 
-本项目支持使用 Docker Compose 进行一键部署。
+本指南介绍如何通过 Docker 镜像进行发布和更新。
 
-## 前置要求
+## 1. 准备工作 (本地开发环境)
 
-- 服务器需安装 **Docker** 和 **Docker Compose**。
+### 1.1 配置镜像地址
+修改项目根目录下的 `.env.docker` 文件，填入你的 Docker Hub 用户名或镜像仓库地址。
 
-## 部署步骤
+```ini
+DOCKER_IMAGE_FRONTEND=your_username/liu-site-cms-frontend:latest
+DOCKER_IMAGE_BACKEND=your_username/liu-site-cms-backend:latest
+```
 
-1. **上传代码**
-   将本项目代码上传至服务器。
+### 1.2 构建并推送镜像
+在本地运行发布脚本，将代码打包成镜像并推送到仓库。
 
-2. **配置环境变量**
-   进入 `backend` 目录，复制 `.env.example` 为 `.env`，并填入你的配置信息（如 GitHub Token）。
-   ```bash
-   cd backend
-   cp .env.example .env
-   vim .env
-   ```
+**Windows:**
+```powershell
+./publish_images.ps1
+```
 
-3. **运行部署脚本**
-   在项目根目录下运行：
-   ```bash
-   chmod +x deploy.sh
-   ./deploy.sh
-   ```
+**Linux/Mac:**
+```bash
+chmod +x publish_images.sh
+./publish_images.sh
+```
 
-   或者直接使用 Docker 命令：
-   ```bash
-   docker-compose up -d --build
-   ```
+> **注意**: 首次推送前需要运行 `docker login` 登录你的镜像仓库账号。
 
-## 访问服务
+---
 
-- **前端页面**: `http://<服务器IP>`
-- **后端 API**: `http://<服务器IP>:3000`
+## 2. 服务器部署
 
-## 维护命令
+### 2.1 上传必要文件
+你只需要将以下文件上传到服务器：
+- `docker-compose.yml`
+- `.env.docker`
+- `deploy_image.sh`
+- `backend/.env` (或在服务器上创建)
 
-- **查看日志**:
-  ```bash
-  docker-compose logs -f
-  ```
-- **停止服务**:
-  ```bash
-  docker-compose down
-  ```
-- **重启服务**:
-  ```bash
-  docker-compose restart
-  ```
+### 2.2 首次部署与更新
+在服务器上运行 `deploy_image.sh` 脚本即可自动拉取最新镜像并重启服务。
+
+```bash
+chmod +x deploy_image.sh
+./deploy_image.sh
+```
+
+### 2.3 手动命令
+如果你想手动操作：
+
+```bash
+# 加载环境变量
+export $(grep -v '^#' .env.docker | xargs)
+
+# 拉取最新镜像
+docker-compose pull
+
+# 启动服务
+docker-compose up -d
+```

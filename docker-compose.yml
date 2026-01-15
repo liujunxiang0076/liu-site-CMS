@@ -13,6 +13,7 @@ services:
     restart: always
 
   backend:
+    image: ${DOCKER_IMAGE_BACKEND:-liu-site-cms-backend}
     build: ./backend
     container_name: cms-backend
     ports:
