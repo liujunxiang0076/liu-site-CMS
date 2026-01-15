@@ -13,11 +13,11 @@ export const articleApi = {
   getList: () => apiClient.get<any, ApiResponse<any[]>>('/articles'),
 
   // 获取文章详情
-  getDetail: (path: string) => apiClient.get<any, ApiResponse<{
+  getDetail: (path: string, config?: any) => apiClient.get<any, ApiResponse<{
     path: string;
     title: string;
     content: string;
-  }>>('/article/detail', { params: { path } }),
+  }>>('/article/detail', { params: { path }, ...config }),
 
   // 保存文章
   save: (data: ArticleSaveParams) => apiClient.post<any, ApiResponse<{

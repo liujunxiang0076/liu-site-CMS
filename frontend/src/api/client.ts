@@ -10,10 +10,19 @@ const apiClient = axios.create({
 apiClient.interceptors.response.use(
   (response) => {
     const res = response.data;
+    // @ts-ignore
+    const { skipErrorHandle } = response.config;
     
+    if (res.code === 200) {
+      return res; // 成功直接返回
+    }
+
+    // 如果设置了跳过错误处理，则直接 reject，不弹窗
+    if (skipErrorHandle) {
+      return Promise.reject(new Error(res.msg));
+    }
+
     switch (res.code) {
-      case 200:
-        return res; // 成功直接返回
       case 401:
         ElMessage.warning('登录已过期，请重新登录');
         // router.push('/login'); 
@@ -30,6 +39,10 @@ apiClient.interceptors.response.use(
     return Promise.reject(new Error(res.msg));
   },
   (error) => {
+    // @ts-ignore
+    if (error.config?.skipErrorHandle) {
+       return Promise.reject(error);
+    }
     // 这里的 error 处理的是网络层面的（如 500 服务器崩了或断网）
     ElMessage.error('服务器响应失败，请联系管理员');
     return Promise.reject(error);
