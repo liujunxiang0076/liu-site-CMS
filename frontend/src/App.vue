@@ -6,7 +6,7 @@
     <main class="main-content" v-loading="isContentLoading">
       <div v-if="currentArticle" class="editor-container">
         <div class="editor-header">
-          <span class="path-tag">{{ currentArticle.path }}</span>
+          <span class="path-tag" :class="articleStatus">{{ currentArticle.path }}</span>
           <el-button type="primary" :loading="isSaving" @click="handleSave" :disabled="!isModified">
             {{ isSaving ? '同步中...' : '推送至 GitHub' }}
           </el-button>
@@ -38,6 +38,7 @@ const isSideLoading = ref(false)
 const isContentLoading = ref(false)
 const isSaving = ref(false)
 const originalContent = ref('')
+const localSavedContent = ref('') // 新增：本地保存的内容快照
 const selectedNode = ref<any>(null) // 统一记录当前选中的节点
 
 const currentArticle = ref<{
@@ -45,12 +46,54 @@ const currentArticle = ref<{
   title: string;
   content: string;
   sha: string;
+  isSynced?: boolean; // 新增：标识是否来自同步源
 } | null>(null)
 
 // 计算属性：判断内容是否被修改
 const isModified = computed(() => {
   if (!currentArticle.value) return false
   return currentArticle.value.content !== originalContent.value
+})
+
+// --- 状态点逻辑 ---
+const articleStatus = computed(() => {
+  if (!currentArticle.value) return ''
+  
+  // 0. 正在保存/同步中 (中间状态)
+  if (isSaving.value) {
+    return 'status-syncing'
+  }
+
+  const currentHash = currentArticle.value.content
+  const lastSyncedHash = originalContent.value
+  // 使用 explicit isSynced 标记或 sha 存在性
+  const isFromSyncSource = currentArticle.value.isSynced || !!currentArticle.value.sha
+  const isSavedLocally = currentHash === localSavedContent.value
+  const hasUnsavedChanges = currentHash !== localSavedContent.value
+  const isNewArticle = !currentArticle.value.sha && !currentArticle.value.isSynced
+
+  // 1. 已同步：来自同步源 且 内容未变 (或者是新建并推送成功的)
+  // 注意：只要是同步源且内容一致，就是绿色，不管是否本地保存了一次(只要内容没变)
+  if (isFromSyncSource && currentHash === lastSyncedHash) {
+    return 'status-synced'
+  }
+  
+  // 2. 新建文章：是新文章 且 未本地保存
+  if (isNewArticle && !isSavedLocally) {
+    return 'status-new'
+  }
+
+  // 3. 修改未保存：有未保存变更 且 未本地保存
+  if (hasUnsavedChanges && !isSavedLocally) {
+    return 'status-modified-unsaved'
+  }
+
+  // 4. 修改已保存：已本地保存 且 (未推送到GitHub 或 内容有变更)
+  if (isSavedLocally && (currentHash !== lastSyncedHash || !isFromSyncSource)) {
+    return 'status-modified-saved'
+  }
+
+  return ''
 })
 
 // --- 核心逻辑 ---
@@ -93,8 +136,14 @@ const handleSelectArticle = async (data: any) => {
   isContentLoading.value = true
   try {
     const res = await articleApi.getDetail(data.path)
-    currentArticle.value = res.data
+    // 修复：手动合并 SHA，因为后端将其放在顶层而非 data 中
+    currentArticle.value = {
+      ...res.data,
+      sha: res.sha,
+      isSynced: true // 明确标记为同步源文章
+    }
     originalContent.value = res.data.content
+    localSavedContent.value = res.data.content
   } catch (err) {
     ElMessage.error('读取内容失败')
   } finally {
@@ -123,9 +172,11 @@ const handleNewArticle = async () => {
         path: fullPath,
         title: name,
         content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始创作...`,
-        sha: ""
+        sha: "",
+        isSynced: false
       }
       originalContent.value = ""
+      localSavedContent.value = ""
 
       // 2. 构造虚拟节点（用于左侧显示）
       const newVirtualFile = {
@@ -198,14 +249,15 @@ const handleSave = async () => {
       message: userInputMsg
     })
 
-    if (res.data.status === 'success') {
+    if (res.code === 200) {
       ElMessage.success('同步成功')
       originalContent.value = currentArticle.value.content
+      localSavedContent.value = currentArticle.value.content
       // 关键：同步成功后重新拉取列表，消除“本地”状态
       await fetchList()
-      // 更新 SHA
-      const detailRes = await articleApi.getDetail(currentArticle.value.path)
-      currentArticle.value.sha = detailRes.data.sha
+      // 更新 SHA 和同步状态
+      currentArticle.value.sha = res.sha
+      currentArticle.value.isSynced = true
     }
   } catch (err) {
     if (err !== 'cancel') ElMessage.error('保存失败')
@@ -314,6 +366,28 @@ onMounted(fetchList)
           padding: 4px 10px;
           border-radius: 4px;
           font-family: 'Fira Code', monospace;
+          
+          /* 状态点样式系统 */
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          transition: all 0.3s ease;
+
+          &::before {
+            content: '';
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+          }
+
+          /* 状态颜色定义 */
+          &.status-synced::before { background-color: #008000; }           /* 已同步 - 深绿色 RGB(0,128,0) */
+          &.status-syncing::before { background-color: #2196F3; }          /* 同步中 - 蓝色 */
+          &.status-modified-unsaved::before { background-color: #795548; } /* 修改未保存 - 棕色 */
+          &.status-modified-saved::before { background-color: #FFC107; }   /* 修改已保存 - 黄色 */
+          &.status-new::before { background-color: #F44336; }              /* 新建文章 - 红色 */
         }
       }
 
