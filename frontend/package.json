@@ -14,9 +14,14 @@
   "packageManager": "pnpm@10.28.0",
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "@types/crypto-js": "^4.2.2",
+    "@types/uuid": "^11.0.0",
     "axios": "^1.13.2",
+    "crypto-js": "^4.2.0",
     "element-plus": "^2.13.1",
+    "localforage": "^1.10.0",
     "md-editor-v3": "^6.3.1",
+    "uuid": "^13.0.0",
     "vditor": "^3.11.2",
     "vue": "^3.5.26",
     "vue-router": "^4.6.4"
