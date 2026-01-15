@@ -277,7 +277,7 @@ const handleSelectArticle = async (data: any) => {
     const draftContent = localStorage.getItem(draftKey)
     
     if (draftContent) {
-      const remoteContent = (res as any).content || '';
+      const remoteContent = (res as any).data?.content || '';
       const isDifferent = hasSubstantialDifference(draftContent, remoteContent);
 
       logConsistencyCheck(
@@ -310,8 +310,8 @@ const handleSelectArticle = async (data: any) => {
       }
     }
 
-    originalContent.value = (res as any).content
-    localSavedContent.value = (res as any).content
+    originalContent.value = (res as any).data?.content || ''
+    localSavedContent.value = (res as any).data?.content || ''
   } catch (err) {
     ElMessage.error('读取内容失败')
   } finally {
