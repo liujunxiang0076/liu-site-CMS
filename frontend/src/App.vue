@@ -69,17 +69,26 @@ let autoSaveTimer: any = null
 
 // 监听内容变化进行自动保存
 watch(() => currentArticle.value?.content, (newVal, oldVal) => {
-  if (!currentArticle.value || newVal === oldVal) return
+  if (!currentArticle.value || newVal === oldVal || isContentLoading.value) return
   
   // 清除旧定时器
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   
   autoSaveStatus.value = '输入中...'
   
-  // 防抖 1秒 (虽然要求30s间隔，但实时防抖体验更好，只要不频繁IO即可)
+  // 防抖 1秒
   autoSaveTimer = setTimeout(async () => {
     if (currentArticle.value) {
       try {
+        // 核心修正：仅当内容确实有变化（与原始版本不同）时，才保存草稿
+        // 如果内容回到了原始版本，说明已撤销或未修改，应清除草稿
+        if (!currentArticle.value.isLocal && newVal === originalContent.value) {
+           const key = 'cms_draft_' + currentArticle.value.path
+           localStorage.removeItem(key)
+           autoSaveStatus.value = ''
+           return
+        }
+
         // 如果是本地新建的文章
         if (currentArticle.value.isLocal && currentArticle.value.id) {
           await storage.saveLocalArticle({
@@ -91,8 +100,6 @@ watch(() => currentArticle.value?.content, (newVal, oldVal) => {
             isSynced: false
           });
         } else {
-           // 对于远程文章，也可以考虑保存到本地草稿，这里暂且复用之前的 localStorage 逻辑作为简单备份
-           // 或者也可以升级为 storage 存储
            const key = 'cms_draft_' + currentArticle.value.path
            localStorage.setItem(key, newVal || '')
         }
@@ -148,6 +155,11 @@ const articleStatus = computed(() => {
   // 4. 修改已保存：已本地保存 且 (未推送到GitHub 或 内容有变更)
   if (isSavedLocally && (currentHash !== lastSyncedHash || !isFromSyncSource)) {
     return 'status-modified-saved'
+  }
+
+  // 兜底：如果是同步源且没有变更，默认显示绿色
+  if (isFromSyncSource) {
+    return 'status-synced'
   }
 
   return ''
