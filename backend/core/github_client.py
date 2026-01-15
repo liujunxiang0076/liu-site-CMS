@@ -34,6 +34,15 @@ class GitHubClient:
             logger.error(f"Failed to connect to GitHub repo: {e}")
             raise e
 
+    def get_latest_commit_sha(self, branch: str = "main") -> str:
+        """获取指定分支的最新 Commit SHA，作为数据版本号"""
+        try:
+            branch_obj = self.repo.get_branch(branch)
+            return branch_obj.commit.sha
+        except Exception as e:
+            logger.error(f"Failed to get branch sha: {e}")
+            return None
+
     def get_file_content(self, path: str):
         """读取文件内容和 SHA"""
         content_file = self.repo.get_contents(path)

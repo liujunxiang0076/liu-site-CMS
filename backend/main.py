@@ -2,6 +2,8 @@ import os
 import datetime
 import base64
 import logging
+import json
+import redis
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -33,6 +35,47 @@ app = FastAPI()
 # 3. 初始化工具类
 client = GitHubClient()
 uploader = TelegramUploader()
+
+# Redis 初始化
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+try:
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
+    redis_client.ping()
+    logger.info(f"Redis connected at {REDIS_HOST}:{REDIS_PORT}")
+except Exception as e:
+    logger.warning(f"Redis connection failed: {e}. Caching will be disabled.")
+    redis_client = None
+
+# 缓存配置
+CACHE_TTL_ARTICLES = 3600  # 1 hour
+CACHE_TTL_DETAIL = 86400   # 24 hours
+CACHE_KEY_VERSION = "cms:version"
+CACHE_KEY_ARTICLES = "cms:articles"
+
+def get_cache(key: str):
+    if not redis_client: return None
+    try:
+        return redis_client.get(key)
+    except Exception as e:
+        logger.error(f"Redis get failed: {e}")
+        return None
+
+def set_cache(key: str, value: str, ex: int = None):
+    if not redis_client: return
+    try:
+        redis_client.set(key, value, ex=ex)
+    except Exception as e:
+        logger.error(f"Redis set failed: {e}")
+
+def delete_cache(pattern: str):
+    if not redis_client: return
+    try:
+        keys = redis_client.keys(pattern)
+        if keys:
+            redis_client.delete(*keys)
+    except Exception as e:
+        logger.error(f"Redis delete failed: {e}")
 
 # --- 请求模型定义 ---
 
@@ -68,9 +111,30 @@ app.add_middleware(
 
 # --- API 接口 ---
 
-@app.get("/api/articles")
-def get_articles():
+@app.get("/api/version")
+def get_version():
+    """获取当前数据版本号 (Latest Commit SHA)"""
     try:
+        version = get_cache(CACHE_KEY_VERSION)
+        if not version:
+            version = client.get_latest_commit_sha()
+            if version:
+                set_cache(CACHE_KEY_VERSION, version, ex=300) # 5 minutes TTL for version check
+        
+        return success(data={"version": version})
+    except Exception as e:
+        return fail(msg=f"获取版本失败: {str(e)}", code=Code.GITHUB_ERROR)
+
+@app.get("/api/articles")
+def get_articles(force_refresh: bool = False):
+    try:
+        # 缓存检查
+        if not force_refresh:
+            cached_data = get_cache(CACHE_KEY_ARTICLES)
+            if cached_data:
+                data = json.loads(cached_data)
+                return success(data=data, total=len(data), extra={"cache": "HIT"})
+
         # 获取全量文件树
         tree = client.repo.get_git_tree("main", recursive=True)
         root = {"name": "Root", "children": []}
@@ -109,24 +173,39 @@ def get_articles():
                 if sub["name"] in ["posts", "drafts"]:
                     final_list.extend(sub["children"])
         
+        # 写入缓存
+        set_cache(CACHE_KEY_ARTICLES, json.dumps(final_list), ex=CACHE_TTL_ARTICLES)
+        
         # 返回标准成功结构，携带数据总量
-        return success(data=final_list, total=len(final_list))
+        return success(data=final_list, total=len(final_list), extra={"cache": "MISS"})
     except Exception as e:
         logger.error(f"获取文章列表失败: {str(e)}", exc_info=True)
         return fail(msg=f"获取文章列表失败: {str(e)}", code=Code.INTERNAL_ERROR)
 
 @app.get("/api/article/detail")
-def get_article_detail(path: str):
+def get_article_detail(path: str, force_refresh: bool = False):
     try:
+        cache_key = f"cms:article:{path}"
+        
+        if not force_refresh:
+            cached_data = get_cache(cache_key)
+            if cached_data:
+                return success(data=json.loads(cached_data), extra={"cache": "HIT"})
+
         content_file = client.repo.get_contents(path)
         raw_content = base64.b64decode(content_file.content).decode('utf-8')
         
-        # 返回详情，并带上关键的 SHA
-        return success(data={
+        result = {
             "path": path,
             "title": os.path.basename(path),
             "content": raw_content,
-        }, sha=content_file.sha)
+        }
+        
+        # 写入缓存
+        set_cache(cache_key, json.dumps(result), ex=CACHE_TTL_DETAIL)
+
+        # 返回详情，并带上关键的 SHA
+        return success(data=result, sha=content_file.sha, extra={"cache": "MISS"})
     except Exception as e:
         logger.error(f"读取文件内容失败: {path} - {str(e)}", exc_info=True)
         return fail(msg=f"读取文件内容失败: {path}", code=Code.NOT_FOUND)
@@ -165,6 +244,12 @@ def save_to_github(item: SaveArticleRequest):
         # 核心：必须返回新的 SHA，否则前端无法连续保存
         new_sha = res['content'].sha
         logger.info(f"文件{action}成功: {item.path}, New SHA: {new_sha}")
+        
+        # 缓存清理
+        delete_cache(CACHE_KEY_ARTICLES)
+        delete_cache(f"cms:article:{item.path}")
+        delete_cache(CACHE_KEY_VERSION)
+        
         return success(msg=f"文件{action}成功", sha=new_sha)
     except Exception as e:
         logger.error(f"保存失败: {str(e)}", exc_info=True)
@@ -173,7 +258,7 @@ def save_to_github(item: SaveArticleRequest):
             return fail(msg="保存失败：GitHub 版本冲突，请刷新页面重新编辑", code=Code.GITHUB_ERROR)
         return fail(msg=f"保存失败: {str(e)}", code=Code.INTERNAL_ERROR)
 
-# 新增：图片上传接口
+# ... (image upload unchanged) ...
 @app.post("/api/upload/image")
 async def upload_image(file: UploadFile = File(...)):
     try:
@@ -181,13 +266,6 @@ async def upload_image(file: UploadFile = File(...)):
         if not file.content_type.startswith("image/"):
             return fail(msg="仅支持上传图片文件", code=Code.PARAM_ERROR)
         
-        # 2. 验证文件大小 (例如限制 5MB)
-        # 注意：UploadFile 是流式读取，直接读取大小可能不准，这里简单跳过或在读取时判断
-        # content = await file.read()
-        # if len(content) > 5 * 1024 * 1024:
-        #     return fail(msg="图片大小不能超过 5MB", code=Code.PARAM_ERROR)
-        # await file.seek(0) # 重置指针
-
         logger.info(f"开始上传图片: {file.filename}")
         url = await uploader.upload_image(file)
         
@@ -212,6 +290,11 @@ def delete_article(item: DeleteArticleRequest):
             sha=item.sha,
             branch="main"
         )
+        # 缓存清理
+        delete_cache(CACHE_KEY_ARTICLES)
+        delete_cache(f"cms:article:{item.path}")
+        delete_cache(CACHE_KEY_VERSION)
+        
         return success(msg="文章已从 GitHub 彻底移除")
     except Exception as e:
         return fail(msg=f"删除操作失败: {str(e)}", code=Code.GITHUB_ERROR)
@@ -241,6 +324,12 @@ def rename_article(item: RenameArticleRequest):
             sha=item.sha,
             branch="main"
         )
+        
+        # 缓存清理
+        delete_cache(CACHE_KEY_ARTICLES)
+        delete_cache(f"cms:article:{item.old_path}")
+        delete_cache(f"cms:article:{item.new_path}")
+        delete_cache(CACHE_KEY_VERSION)
         
         # 返回新文件的 SHA，以便前端立即继续编辑新文件
         return success(msg="重命名成功", sha=create_res['content'].sha)

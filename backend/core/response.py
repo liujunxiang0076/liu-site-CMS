@@ -30,10 +30,11 @@ def success(
     data: Any = None, 
     msg: str = "操作成功", 
     sha: str = None, 
-    total: int = None
+    total: int = None,
+    **kwargs
 ):
     """成功响应：支持返回数据、GitHub SHA 和分页总数"""
-    return {
+    res = {
         "code": Code.SUCCESS,
         "msg": msg,
         "data": data,
@@ -41,6 +42,8 @@ def success(
         "total": total,
         "timestamp": time.time()
     }
+    res.update(kwargs)
+    return res
 
 def fail(
     msg: str = "操作失败", 
