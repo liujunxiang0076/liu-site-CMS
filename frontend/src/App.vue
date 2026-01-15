@@ -34,6 +34,8 @@ import Sidebar from './components/Sidebar.vue'
 import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/style.css';
 import { articleApi } from '@/api/article'
+import { v4 as uuidv4 } from 'uuid';
+import * as storage from '@/utils/storage';
 
 
 // --- 状态定义 ---
@@ -47,16 +49,17 @@ const selectedNode = ref<any>(null) // 统一记录当前选中的节点
 const autoSaveStatus = ref('') // 自动保存状态提示
 
 const currentArticle = ref<{
+  id?: string; // 本地文章ID
   path: string;
   title: string;
   content: string;
   sha: string;
   isSynced?: boolean; // 新增：标识是否来自同步源
+  isLocal?: boolean; // 新增：标识是否为纯本地文章
 } | null>(null)
 
 // 自动保存逻辑
 let autoSaveTimer: any = null
-const DRAFT_KEY_PREFIX = 'cms_draft_'
 
 // 监听内容变化进行自动保存
 watch(() => currentArticle.value?.content, (newVal, oldVal) => {
@@ -67,13 +70,32 @@ watch(() => currentArticle.value?.content, (newVal, oldVal) => {
   
   autoSaveStatus.value = '输入中...'
   
-  // 防抖 1秒
-  autoSaveTimer = setTimeout(() => {
+  // 防抖 1秒 (虽然要求30s间隔，但实时防抖体验更好，只要不频繁IO即可)
+  autoSaveTimer = setTimeout(async () => {
     if (currentArticle.value) {
-      const key = DRAFT_KEY_PREFIX + currentArticle.value.path
-      localStorage.setItem(key, newVal || '')
-      autoSaveStatus.value = '已自动保存到本地'
-      setTimeout(() => { autoSaveStatus.value = '' }, 2000)
+      try {
+        // 如果是本地新建的文章
+        if (currentArticle.value.isLocal && currentArticle.value.id) {
+          await storage.saveLocalArticle({
+            id: currentArticle.value.id,
+            title: currentArticle.value.title,
+            content: newVal || '',
+            path: currentArticle.value.path,
+            updatedAt: Date.now(),
+            isSynced: false
+          });
+        } else {
+           // 对于远程文章，也可以考虑保存到本地草稿，这里暂且复用之前的 localStorage 逻辑作为简单备份
+           // 或者也可以升级为 storage 存储
+           const key = 'cms_draft_' + currentArticle.value.path
+           localStorage.setItem(key, newVal || '')
+        }
+        autoSaveStatus.value = '已自动保存到本地'
+        setTimeout(() => { autoSaveStatus.value = '' }, 2000)
+      } catch (e: any) {
+        autoSaveStatus.value = '自动保存失败'
+        ElMessage.error(e.message || '本地存储失败');
+      }
     }
   }, 1000)
 })
@@ -293,9 +315,15 @@ const handleNewFolder = async () => {
 
 // 6. 保存/推送文章
 const handleSave = async () => {
-  if (!currentArticle.value || isSaving.value || !isModified.value) return
+  if (!currentArticle.value || isSaving.value) return
 
-  const content = currentArticle.value.content
+  // 1. 数据验证
+  const content = currentArticle.value.content || ''
+  if (!content.trim()) {
+    ElMessage.warning('文章内容不能为空')
+    return
+  }
+  
   // 简单检查 Frontmatter (可选，根据严格程度)
   const hasFrontmatter = content.startsWith('---')
   const hasTitle = /^title:\s+.+/m.test(content)
@@ -332,25 +360,72 @@ const handleSave = async () => {
     )
 
     isSaving.value = true
+
+    // 冲突检测与 SHA 获取 (针对本地文章)
+    let finalSha = currentArticle.value.sha
+    if (currentArticle.value.isLocal) {
+      // 尝试获取远程文件信息，看是否已存在
+      try {
+        const remoteRes = await articleApi.getDetail(currentArticle.value.path)
+        // 如果能获取到，说明远程已存在
+        try {
+           await ElMessageBox.confirm(
+             `云端已存在同名文件 (SHA: ${remoteRes.sha.substring(0,7)})，继续保存将覆盖云端内容。`,
+             '版本冲突',
+             {
+               confirmButtonText: '覆盖保存',
+               cancelButtonText: '取消',
+               type: 'warning'
+             }
+           )
+           finalSha = remoteRes.sha // 使用远程 SHA 进行覆盖
+        } catch {
+           isSaving.value = false
+           return // 用户取消
+        }
+      } catch (e) {
+        // 获取失败通常说明文件不存在（404），这是正常的“新建”流程
+        // 忽略错误，finalSha 保持为空即可
+      }
+    }
+
     const res = await articleApi.save({
       path: currentArticle.value.path,
       content: currentArticle.value.content,
-      sha: currentArticle.value.sha,
+      sha: finalSha,
       message: userInputMsg
     })
 
     if (res.code === 200) {
       ElMessage.success('同步成功')
+      
+      // 如果是本地文章，同步成功后删除本地存储
+      if (currentArticle.value.isLocal && currentArticle.value.id) {
+        await storage.removeLocalArticle(currentArticle.value.id)
+      } else {
+        // 清除旧的 localStorage 草稿
+        const draftKey = 'cms_draft_' + currentArticle.value.path
+        localStorage.removeItem(draftKey)
+      }
+      
       originalContent.value = currentArticle.value.content
       localSavedContent.value = currentArticle.value.content
+      autoSaveStatus.value = ''
+      
       // 关键：同步成功后重新拉取列表，消除“本地”状态
       await fetchList()
       // 更新 SHA 和同步状态
       currentArticle.value.sha = res.sha
       currentArticle.value.isSynced = true
+      currentArticle.value.isLocal = false
+      currentArticle.value.id = undefined
     }
-  } catch (err) {
-    if (err !== 'cancel') ElMessage.error('保存失败')
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      // 优化错误提示
+      const errorMsg = err.response?.data?.msg || err.message || '保存失败'
+      ElMessage.error(errorMsg)
+    }
   } finally {
     isSaving.value = false
   }
