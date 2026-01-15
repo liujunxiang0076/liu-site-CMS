@@ -17,7 +17,7 @@ services:
     build: ./backend
     container_name: cms-backend
     ports:
-      - "3000:3000"
+      - "8000:8000"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379

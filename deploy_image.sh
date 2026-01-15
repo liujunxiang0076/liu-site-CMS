@@ -29,11 +29,11 @@ echo -e "${GREEN}正在拉取最新镜像...${NC}"
 echo "Frontend: ${DOCKER_IMAGE_FRONTEND}"
 echo "Backend:  ${DOCKER_IMAGE_BACKEND}"
 
-docker-compose pull
+docker compose pull
 
 # 4. 启动服务
 echo -e "${GREEN}正在启动服务...${NC}"
-docker-compose up -d
+docker compose up -d
 
 # 5. 检查状态
 if [ $? -eq 0 ]; then

@@ -30,6 +30,10 @@ chmod +x publish_images.sh
 
 ---
 
+## 前置要求
+
+- 服务器需安装 **Docker** (新版 Docker Desktop 或 Docker Engine V2 已包含 Compose 插件)。
+
 ## 2. 服务器部署
 
 ### 2.1 上传必要文件

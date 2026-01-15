@@ -18,9 +18,9 @@ if (Test-Path ".env.docker") {
 
 # 3. 构建并推送
 Write-Host "开始构建并推送镜像..." -ForegroundColor Green
-docker-compose build
+docker compose build
 if ($?) {
-    docker-compose push
+    docker compose push
     if ($?) {
         Write-Host "镜像推送成功！" -ForegroundColor Green
         Write-Host "前端镜像: $env:DOCKER_IMAGE_FRONTEND"

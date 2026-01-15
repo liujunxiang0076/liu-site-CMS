@@ -17,11 +17,11 @@ fi
 echo -e "${GREEN}开始构建并推送镜像...${NC}"
 
 # 构建
-docker-compose build
+docker compose build
 
 if [ $? -eq 0 ]; then
     # 推送
-    docker-compose push
+    docker compose push
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}镜像推送成功！${NC}"

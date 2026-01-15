@@ -9,7 +9,7 @@ echo -e "${GREEN}开始部署流程...${NC}"
 
 # 1. 检查 Docker 环境
 if ! command -v docker &> /dev/null; then
-    echo -e "${RED}错误: 未检测到 Docker，请先安装 Docker 和 Docker Compose。${NC}"
+    echo -e "${RED}错误: 未检测到 Docker，请先安装 Docker。${NC}"
     exit 1
 fi
 
@@ -23,7 +23,7 @@ fi
 
 # 3. 启动服务
 echo -e "${GREEN}正在构建并启动服务...${NC}"
-docker-compose up -d --build
+docker compose up -d --build
 
 # 4. 检查状态
 if [ $? -eq 0 ]; then
