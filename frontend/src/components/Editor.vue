@@ -18,9 +18,9 @@
 <script setup lang="ts">
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { ref, watch, computed, onMounted } from 'vue'
+import { articleApi } from '@/api/article'
 
 const props = defineProps<{
   articleData: any
@@ -45,22 +45,30 @@ const currentArticle = ref({
 // --- 核心逻辑：状态判断 ---
 
 const articleStatus = computed(() => {
-  // 1. 如果没有 SHA，说明是新建但从未同步过 GitHub 的虚拟文件
+  // 1. 如果正在保存
+  if (isSaving.value) return 'is-syncing'
+
+  // 2. 如果没有 SHA，说明是新建但从未同步过 GitHub 的虚拟文件
   if (!currentArticle.value.sha) return 'is-new'
 
-  // 2. 如果当前内容与原始内容不一致，说明修改了
-  const currentContent = vditor.value?.getValue() || ''
+  // 3. 如果当前内容与原始内容不一致，说明修改了
   // 这里的 isModifiedLocally 确保在输入时能触发 computed 重新计算
-  if (isModifiedLocally.value || currentContent !== originalContent.value) {
+  // 注意：我们假设 originalContent 就是“已同步”的内容
+  if (isModifiedLocally.value) {
     return 'is-modified'
   }
 
-  // 3. 否则是已同步状态
+  // 4. 否则是已同步状态
   return 'is-synced'
 })
 
 const statusTip = computed(() => {
-  const tips = { 'is-new': '新文档 (未同步)', 'is-modified': '已修改 (待保存)', 'is-synced': '内容已同步' }
+  const tips: Record<string, string> = { 
+    'is-new': '新文档 (未同步)', 
+    'is-modified': '已修改 (待保存)', 
+    'is-synced': '内容已同步',
+    'is-syncing': '同步中...'
+  }
   return tips[articleStatus.value]
 })
 
@@ -96,19 +104,19 @@ const handleSave = async () => {
 
   isSaving.value = true
   try {
-    const res = await axios.post('/api/article/save', {
+    const res = await articleApi.save({
       path: currentArticle.value.path,
-      content: content,
+      content: content || '',
       sha: currentArticle.value.sha,
       // 标题若修改，可以在这里处理 Frontmatter 更新逻辑（如果后端没处理的话）
       message: `Update: ${currentArticle.value.title}`
     })
 
-    if (res.data.status === 'success') {
+    if (res.code === 200) {
       ElMessage.success('已安全同步至 GitHub')
       
       // 更新 SHA 避免下次提交 409 冲突
-      currentArticle.value.sha = res.data.sha
+      currentArticle.value.sha = res.sha || ''
 
       // 重要：保存后将当前内容设为“原始内容”，让点变绿
       originalContent.value = content || ''
@@ -117,7 +125,8 @@ const handleSave = async () => {
       emit('refresh')
     }
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '保存失败')
+    // 错误已由拦截器处理，此处仅做兜底或特定逻辑
+    console.error(e)
   } finally {
     isSaving.value = false
   }
@@ -132,11 +141,12 @@ onMounted(() => {
     placeholder: '输入正文内容...',
     // 监听输入事件，实现小点实时变色
     input: (value) => {
+      // 简单判断：只要内容不等于原始内容，就是 modified
       isModifiedLocally.value = value !== originalContent.value
     },
     // 图片上传配置
     upload: {
-      url: '/api/upload/image', // 对接你的 main.py 中的上传接口
+      url: '/api/upload/image', // 保持原样，Vditor 内部使用 XHR
       fieldName: 'file',
       max: 5 * 1024 * 1024, // 5MB
       linkToImgUrl: '/api/fetch/image',
@@ -194,14 +204,19 @@ onMounted(() => {
       }
 
       &.is-modified {
-        background: #e6a23c; // 黄色：已修改
-        box-shadow: 0 0 6px rgba(230, 162, 60, 0.5);
-        animation: breath 2s infinite ease-in-out;
+        background: #795548; // 棕色：已修改 (未同步)
+        box-shadow: 0 0 6px rgba(121, 85, 72, 0.5);
       }
 
       &.is-synced {
-        background: #67c23a; // 绿色：已同步
-        box-shadow: 0 0 5px rgba(103, 194, 58, 0.5);
+        background: #008000; // 深绿色：已同步
+        box-shadow: 0 0 5px rgba(0, 128, 0, 0.5);
+      }
+
+      &.is-syncing {
+        background: #2196F3; // 蓝色：同步中
+        box-shadow: 0 0 5px rgba(33, 150, 243, 0.5);
+        animation: breath 2s infinite ease-in-out;
       }
     }
 
