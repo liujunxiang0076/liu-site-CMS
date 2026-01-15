@@ -1,16 +1,43 @@
 import os
 import base64
+import logging
 from github import Github
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger("CMS-GitHub")
 
 class GitHubClient:
     def __init__(self):
         token = os.getenv("GITHUB_TOKEN")
         repo_name = os.getenv("REPO_NAME")
-        self.g = Github(token)
-        self.repo = self.g.get_repo(repo_name)
+        
+        # 增加 SSL 验证配置，解决部分网络环境下的 SSL 报错
+        verify_ssl = os.getenv("GITHUB_VERIFY_SSL", "true").lower() == "true"
+        
+        # 检查代理设置
+        proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
+        if proxy:
+            logger.info(f"Detected HTTPS_PROXY: {proxy}")
+        
+        if not verify_ssl:
+            logger.warning("SSL verification is DISABLED. This is insecure but allows connection through some proxies.")
+        
+        # 初始化 Github 客户端
+        # verify 参数用于控制 SSL 证书验证
+        self.g = Github(auth=None, login_or_token=token, verify=verify_ssl)
+        
+        try:
+            self.repo = self.g.get_repo(repo_name)
+            logger.info(f"Successfully connected to repo: {repo_name}")
+        except Exception as e:
+            logger.error(f"Failed to connect to GitHub repo: {e}")
+            raise e
+
+    def get_git_tree(self, branch: str = "main", recursive: bool = True):
+        """获取 Git Tree (用于获取文件列表)"""
+        sha = self.repo.get_branch(branch).commit.sha
+        return self.repo.get_git_tree(sha, recursive=recursive)
 
     def get_file_content(self, path: str):
         """读取文件内容和 SHA"""
