@@ -1,6 +1,6 @@
 <template>
   <div class="cms-layout">
-    <Sidebar :tree-data="treeData" :loading="isSideLoading" @select="handleSelectArticle"
+    <Sidebar ref="sidebarRef" :tree-data="treeData" :loading="isSideLoading" @select="handleSelectArticle"
       @create-article="handleNewArticle" @create-folder="handleNewFolder" @refresh="fetchList" @rename="handleRename"
       @delete="handleDelete" />
     <main class="main-content" v-loading="isContentLoading">
@@ -38,6 +38,8 @@ import { v4 as uuidv4 } from 'uuid';
 import * as storage from '@/utils/storage';
 import { resolveTargetDir } from '@/utils/path';
 
+
+const sidebarRef = ref()
 
 // --- 状态定义 ---
 const treeData = ref<any[]>([])
@@ -149,24 +151,6 @@ const articleStatus = computed(() => {
 })
 
 // --- 核心逻辑 ---
-
-/**
- * 核心修复 1: 确保 getTargetDirPath 能够拿到准确的父级路径
- */
-const getTargetDirPath = () => {
-  // 1. 如果完全没选，默认根目录
-  if (!selectedNode.value) return 'src/posts'
-
-  // 2. 如果选中的是文件夹，直接返回该文件夹路径
-  if (selectedNode.value.type === 'folder') {
-    return selectedNode.value.path
-  }
-
-  // 3. 如果选中的是文件，提取该文件所在的目录
-  const parts = selectedNode.value.path.split('/')
-  parts.pop() // 移除文件名
-  return parts.join('/')
-}
 
 /**
  * 检查文件名是否重复
@@ -336,28 +320,44 @@ const handleNewArticle = async () => {
     })
 
     if (name) {
-      const parentPath = getTargetDirPath();
+      // 使用新的路径解析逻辑
+      const parentPath = resolveTargetDir(selectedNode.value);
       const fileName = name.endsWith('.md') ? name : `${name}.md`;
       const fullPath = `${parentPath}/${fileName}`;
+      const newId = uuidv4(); // 生成唯一ID
 
       // 1. 设置编辑器为待推送状态
       currentArticle.value = {
+        id: newId,
         path: fullPath,
         title: name,
         content: `---\ntitle: ${name}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n开始创作...`,
         sha: "",
-        isSynced: false
+        isSynced: false,
+        isLocal: true
       }
       originalContent.value = ""
       localSavedContent.value = ""
 
+      // 立即保存到本地存储，确保点击节点时能读取到
+      await storage.saveLocalArticle({
+        id: newId,
+        title: name,
+        content: currentArticle.value.content,
+        path: fullPath,
+        updatedAt: Date.now(),
+        isSynced: false
+      });
+
       // 2. 构造虚拟节点（用于左侧显示）
       const newVirtualFile = {
+        id: newId, // 绑定 ID
         name: fileName,
         path: fullPath,
         type: 'file',
         isDraft: true,
-        isVirtual: true // 绿色斜体+本地标识
+        isVirtual: true, // 绿色斜体+本地标识
+        isLocal: true
       }
 
       // 3. 智能插入：如果 parentPath 是根部，直接在最外层找
@@ -366,6 +366,11 @@ const handleNewArticle = async () => {
       // 如果递归没找到（比如在根目录下），则直接放最前面
       if (!success && (parentPath === 'src/posts' || parentPath === 'src')) {
         treeData.value.unshift(newVirtualFile);
+      }
+      
+      // 展开父文件夹
+      if (sidebarRef.value) {
+        sidebarRef.value.expandNode(parentPath)
       }
 
       ElMessage.success(`草稿已在目录 [${parentPath}] 下创建`);
@@ -381,7 +386,7 @@ const handleNewFolder = async () => {
     const { value: folderName } = await ElMessageBox.prompt('请输入文件夹名称', '新建文件夹')
     if (!folderName) return
 
-    const parentPath = getTargetDirPath();
+    const parentPath = resolveTargetDir(selectedNode.value);
     const fullPath = `${parentPath}/${folderName}`;
 
     const newNode = {
@@ -395,6 +400,11 @@ const handleNewFolder = async () => {
     const success = insertNodeToTree(treeData.value, parentPath, newNode);
     if (!success) {
       treeData.value.unshift(newNode);
+    }
+    
+    // 展开父文件夹
+    if (sidebarRef.value) {
+      sidebarRef.value.expandNode(parentPath)
     }
 
     ElMessage.success('本地文件夹已就绪');
@@ -570,8 +580,6 @@ const insertNodeToTree = (nodes: any[], targetPath: string, newNode: any): boole
     if (node.path === targetPath && node.type === 'folder') {
       if (!node.children) node.children = [];
       node.children.unshift(newNode);
-      // 关键：强制触发 Vue 对 treeData 的深度更新
-      treeData.value = [...treeData.value];
       return true;
     }
 

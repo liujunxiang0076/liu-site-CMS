@@ -26,6 +26,7 @@
 
       <div class="list-container">
         <el-tree 
+          ref="treeRef"
           :data="treeData" 
           :props="{ label: 'name', children: 'children' }" 
           highlight-current 
@@ -89,6 +90,18 @@ defineProps<{
 
 // 定义事件
 const emit = defineEmits(['select', 'create-article', 'create-folder', 'refresh', 'rename', 'delete'])
+
+const treeRef = ref()
+defineExpose({
+  expandNode: (key: string) => {
+    if (treeRef.value) {
+      const node = treeRef.value.getNode(key)
+      if (node) {
+        node.expanded = true
+      }
+    }
+  }
+})
 
 // 右键菜单状态
 const menu = reactive({
