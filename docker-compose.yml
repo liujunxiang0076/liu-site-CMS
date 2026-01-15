@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: ./frontend
+    container_name: cms-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - cms-network
+    restart: always
+
+  backend:
+    build: ./backend
+    container_name: cms-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    # 挂载 .env 文件，如果 backend 目录下有 .env 则使用，否则请手动创建
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - redis
+    networks:
+      - cms-network
+    restart: always
+    volumes:
+      - ./backend/backend.log:/app/backend.log
+
+  redis:
+    image: redis:alpine
+    container_name: cms-redis
+    networks:
+      - cms-network
+    restart: always
+    volumes:
+      - redis-data:/data
+
+networks:
+  cms-network:
+    driver: bridge
+
+volumes:
+  redis-data:
