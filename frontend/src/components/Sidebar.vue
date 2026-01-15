@@ -8,7 +8,7 @@
       </el-icon>
     </div>
 
-    <div class="sidebar-content" v-show="!isCollapsed">
+    <div class="sidebar-content" v-show="!isCollapsed" @click="handleBackgroundClick">
       <div class="header">
         <span class="title">文章管理</span>
         <div class="actions">
@@ -89,7 +89,7 @@ defineProps<{
 }>()
 
 // 定义事件
-const emit = defineEmits(['select', 'create-article', 'create-folder', 'refresh', 'rename', 'delete'])
+const emit = defineEmits(['select', 'create-article', 'create-folder', 'refresh', 'rename', 'delete', 'clear-selection'])
 
 const treeRef = ref()
 defineExpose({
@@ -99,6 +99,12 @@ defineExpose({
       if (node) {
         node.expanded = true
       }
+    }
+  },
+  // 新增：取消选中方法
+  setCurrentKey: (key: string | null) => {
+    if (treeRef.value) {
+      treeRef.value.setCurrentKey(key)
     }
   }
 })
@@ -124,6 +130,19 @@ const handleNodeClick = (data: any) => {
   menu.visible = false
   // 无论是文件还是文件夹，都触发 select 事件，以便父组件知道当前选中项
   emit('select', data)
+}
+
+// 处理背景点击（空白处）
+const handleBackgroundClick = (event: MouseEvent) => {
+  // 确保点击的不是树节点本身（通过事件冒泡机制，如果点击的是树节点，el-tree 会先处理）
+  // 检查点击的目标是否是树节点的内部元素
+  const target = event.target as HTMLElement
+  if (target.closest('.el-tree-node__content')) return
+  
+  if (treeRef.value) {
+    treeRef.value.setCurrentKey(null) // 清除高亮
+  }
+  emit('clear-selection') // 通知父组件清除选中状态
 }
 
 // 触发右键菜单
@@ -171,6 +190,14 @@ const handleNameConfirm = (data: any) => {
   display: flex;
   flex-direction: column;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  .sidebar-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
 
   // 收缩状态样式
   &.is-collapsed {

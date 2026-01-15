@@ -2,7 +2,7 @@
   <div class="cms-layout">
     <Sidebar ref="sidebarRef" :tree-data="treeData" :loading="isSideLoading" @select="handleSelectArticle"
       @create-article="handleNewArticle" @create-folder="handleNewFolder" @refresh="fetchList" @rename="handleRename"
-      @delete="handleDelete" />
+      @delete="handleDelete" @clear-selection="handleClearSelection" />
     <main class="main-content" v-loading="isContentLoading">
       <div v-if="currentArticle" class="editor-container">
         <div class="editor-header">
@@ -195,7 +195,11 @@ const fetchList = async () => {
 // 选中处理：记录当前节点位置
 const handleSelectArticle = async (data: any) => {
   selectedNode.value = data
-  if (data.type !== 'file') return
+  if (data.type !== 'file') {
+    // 即使选中的是文件夹，也需要清除右侧编辑器内容（或者显示文件夹信息，暂时先清空）
+    currentArticle.value = null
+    return
+  }
 
   isContentLoading.value = true
   try {
@@ -310,6 +314,13 @@ const handleUploadImg = async (files: File[], callback: (urls: string[]) => void
   }
 }
 
+
+const handleClearSelection = () => {
+  selectedNode.value = null
+  // 此时不需要清空编辑器，通常用户点击空白只是想取消左侧树的选中态，
+  // 右侧可能还想继续看文章。如果需要连带清空右侧，可以解开下面注释：
+  // currentArticle.value = null 
+}
 
 /**
  * 新建文章
