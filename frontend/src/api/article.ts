@@ -31,8 +31,8 @@ export const articleApi = {
     }>>('/article/rename', { old_path: oldPath, new_path: newPath, sha }),
 
   // 删除文章
-  delete: (path: string, sha: string) => 
-    apiClient.post<any, ApiResponse<null>>('/article/delete', { path, sha }),
+  delete: (path: string, sha: string, message?: string) => 
+    apiClient.post<any, ApiResponse<null>>('/article/delete', { path, sha, message }),
 
   // 图片上传（如果是直接由 Vditor 调用，保持原样；如果手动调用可写在这）
   uploadImage: (formData: FormData) => 

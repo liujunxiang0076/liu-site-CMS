@@ -244,7 +244,7 @@ const handleSelectArticle = async (data: any) => {
     // 修复：手动合并 SHA，因为后端将其放在顶层而非 data 中
     currentArticle.value = {
       ...res.data,
-      sha: res.sha,
+      sha: res.sha ?? '',
       isSynced: true, // 明确标记为同步源文章
       isLocal: false
     }
@@ -500,7 +500,7 @@ const handleSave = async () => {
         // 如果能获取到，说明远程已存在
         try {
            await ElMessageBox.confirm(
-             `云端已存在同名文件 (SHA: ${remoteRes.sha.substring(0,7)})，继续保存将覆盖云端内容。`,
+             `云端已存在同名文件${remoteRes.sha ? ` (SHA: ${remoteRes.sha.substring(0,7)})` : ''}，继续保存将覆盖云端内容。`,
              '版本冲突',
              {
                confirmButtonText: '覆盖保存',
@@ -508,7 +508,7 @@ const handleSave = async () => {
                type: 'warning'
              }
            )
-           finalSha = remoteRes.sha // 使用远程 SHA 进行覆盖
+           finalSha = remoteRes.sha ?? '' // 使用远程 SHA 进行覆盖
         } catch {
            isSaving.value = false
            return // 用户取消
@@ -550,7 +550,7 @@ const handleSave = async () => {
       }
       
       // 更新 SHA 和同步状态
-      currentArticle.value.sha = res.sha
+      currentArticle.value.sha = res.sha ?? ''
       currentArticle.value.isSynced = true
       currentArticle.value.isLocal = false
       currentArticle.value.id = undefined
@@ -584,14 +584,22 @@ const handleRename = async ({ data, newName }: { data: any, newName: string }) =
 const handleDelete = async (data: any) => {
   try {
     await ElMessageBox.confirm(`确定要删除 ${data.name} 吗？`, '警告', { type: 'warning' })
-    isSideLoading.value = true
     
     // 分支处理：本地文章 vs 远程文章
     if (data.isLocal && data.id) {
+      isSideLoading.value = true
       await storage.removeLocalArticle(data.id)
       ElMessage.success('草稿已删除')
     } else {
-      await articleApi.delete(data.path, data.sha)
+      const { value: userInputMsg } = await ElMessageBox.prompt(
+        '请输入Git提交备注', '确认删除', {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        inputPlaceholder: `Delete ${data.name}`
+      })
+      
+      isSideLoading.value = true
+      await articleApi.delete(data.path, data.sha, userInputMsg)
       ElMessage.success('文件已从 GitHub 删除')
     }
     
@@ -601,7 +609,9 @@ const handleDelete = async (data: any) => {
     
     if (currentArticle.value?.path === data.path) currentArticle.value = null
     // await fetchList() // 移除此行，避免全量刷新
-  } catch (e) { } finally {
+  } catch (e) { 
+    if (e !== 'cancel') console.error(e)
+  } finally {
     isSideLoading.value = false
   }
 }
