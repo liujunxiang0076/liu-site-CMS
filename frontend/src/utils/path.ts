@@ -59,8 +59,10 @@ export const getParentPath = (path: string): string => {
  * Joins path segments securely.
  */
 export const joinPath = (...segments: string[]): string => {
-  return segments
+  const joined = segments
     .map(normalizePath)
     .filter(Boolean)
     .join('/');
+  
+  return joined.replace(/\/+/g, '/');
 };
