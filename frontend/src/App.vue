@@ -186,13 +186,74 @@ const handleSelectArticle = async (data: any) => {
 
   isContentLoading.value = true
   try {
+    // 优先处理本地文章
+    // 增加 isVirtual 判断作为兜底，防止 isLocal 属性丢失
+    if ((data.isLocal || data.isVirtual) && data.type === 'file') {
+      let localArticle = null;
+      
+      // 1. 尝试通过 ID 获取
+      if (data.id) {
+        localArticle = await storage.getLocalArticle(data.id)
+      }
+      
+      // 2. 如果 ID 失效或未找到，尝试通过路径匹配 (兜底策略)
+      if (!localArticle) {
+        const allLocal = await storage.getAllLocalArticles()
+        localArticle = allLocal.find(a => a.path === data.path) || null
+        
+        // 如果通过路径找到了，回填 ID 到节点，方便下次使用
+        if (localArticle) {
+          data.id = localArticle.id
+          data.isLocal = true
+        }
+      }
+
+      if (localArticle) {
+        currentArticle.value = {
+          id: localArticle.id,
+          path: localArticle.path,
+          title: localArticle.title,
+          content: localArticle.content,
+          sha: '',
+          isSynced: false,
+          isLocal: true
+        }
+        originalContent.value = localArticle.content
+        localSavedContent.value = localArticle.content
+        return // 成功读取本地文章，直接返回
+      }
+      
+      console.warn('Local article not found in storage, trying remote...', data)
+    }
+
+    // 远程文章
     const res = await articleApi.getDetail(data.path)
     // 修复：手动合并 SHA，因为后端将其放在顶层而非 data 中
     currentArticle.value = {
       ...res.data,
       sha: res.sha,
-      isSynced: true // 明确标记为同步源文章
+      isSynced: true, // 明确标记为同步源文章
+      isLocal: false
     }
+    
+    // 检查是否有未保存的草稿 (localStorage)
+    const draftKey = 'cms_draft_' + data.path
+    const draftContent = localStorage.getItem(draftKey)
+    if (draftContent && draftContent !== res.data.content) {
+      try {
+        await ElMessageBox.confirm('检测到本地有未保存的草稿，是否恢复？', '恢复草稿', {
+          confirmButtonText: '恢复草稿',
+          cancelButtonText: '丢弃',
+          type: 'info'
+        })
+        currentArticle.value.content = draftContent
+        ElMessage.success('已恢复本地草稿')
+      } catch {
+        // 丢弃草稿
+        localStorage.removeItem(draftKey)
+      }
+    }
+
     originalContent.value = res.data.content
     localSavedContent.value = res.data.content
   } catch (err) {
