@@ -39,6 +39,7 @@ import * as storage from '@/utils/storage';
 import { resolveTargetDir } from '@/utils/path';
 import { getNextSequence, sortNodes } from '@/utils/fileNaming';
 import { getChildrenByPath, findNodeByPath, removeNodeFromTree } from '@/utils/treeHelper';
+import { hasSubstantialDifference, logConsistencyCheck } from '@/utils/consistency';
 
 
 const sidebarRef = ref()
@@ -274,19 +275,37 @@ const handleSelectArticle = async (data: any) => {
     // 检查是否有未保存的草稿 (localStorage)
     const draftKey = 'cms_draft_' + data.path
     const draftContent = localStorage.getItem(draftKey)
-    if (draftContent && draftContent !== (res as any).content) {
-      try {
-        await ElMessageBox.confirm('检测到本地有未保存的草稿，是否恢复？', '恢复草稿', {
-          confirmButtonText: '恢复草稿',
-          cancelButtonText: '丢弃',
-          type: 'info'
-        })
-        if (currentArticle.value) {
-          currentArticle.value.content = draftContent
+    
+    if (draftContent) {
+      const remoteContent = (res as any).content || '';
+      const isDifferent = hasSubstantialDifference(draftContent, remoteContent);
+
+      logConsistencyCheck(
+        data.path, 
+        isDifferent ? 'MISMATCH' : 'MATCH', 
+        isDifferent 
+          ? `Length Diff: ${draftContent.length - remoteContent.length}` 
+          : 'Content effectively identical'
+      );
+
+      if (isDifferent) {
+        try {
+          await ElMessageBox.confirm('检测到本地有未保存的草稿，是否恢复？', '恢复草稿', {
+            confirmButtonText: '恢复草稿',
+            cancelButtonText: '丢弃',
+            type: 'info'
+          })
+          if (currentArticle.value) {
+            currentArticle.value.content = draftContent
+          }
+          ElMessage.success('已恢复本地草稿')
+        } catch {
+          // 丢弃草稿
+          localStorage.removeItem(draftKey)
+          logConsistencyCheck(data.path, 'IGNORED', 'User discarded draft');
         }
-        ElMessage.success('已恢复本地草稿')
-      } catch {
-        // 丢弃草稿
+      } else {
+        // 如果内容实质上一致，静默清理草稿
         localStorage.removeItem(draftKey)
       }
     }
