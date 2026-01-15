@@ -496,7 +496,7 @@ const handleSave = async () => {
     if (currentArticle.value.isLocal) {
       // 尝试获取远程文件信息，看是否已存在
       try {
-        const remoteRes = await articleApi.getDetail(currentArticle.value.path)
+        const remoteRes = await articleApi.getDetail(currentArticle.value.path, { skipErrorHandle: true })
         // 如果能获取到，说明远程已存在
         try {
            await ElMessageBox.confirm(
@@ -543,7 +543,12 @@ const handleSave = async () => {
       autoSaveStatus.value = ''
       
       // 关键：同步成功后重新拉取列表，消除“本地”状态
-      await fetchList()
+      try {
+        await fetchList()
+      } catch (listErr) {
+        console.warn('列表刷新失败，但这不影响文章保存:', listErr);
+      }
+      
       // 更新 SHA 和同步状态
       currentArticle.value.sha = res.sha
       currentArticle.value.isSynced = true
