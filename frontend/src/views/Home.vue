@@ -693,7 +693,14 @@ const handleDelete = async (data: any) => {
     // 这样既能保持文件夹展开状态，又能避免本地草稿丢失
     removeNodeFromTree(treeData.value, { id: data.id, path: data.path });
     
-    if (currentArticle.value?.path === data.path) currentArticle.value = null
+    // 修复：如果删除的是当前正在编辑的文章，则清空右侧编辑器
+    if (currentArticle.value?.path === data.path || (data.isLocal && currentArticle.value?.id === data.id)) {
+      currentArticle.value = null
+      originalContent.value = ''
+      localSavedContent.value = ''
+      autoSaveStatus.value = ''
+    }
+    
     // await fetchList() // 移除此行，避免全量刷新
   } catch (e) { 
     if (e !== 'cancel') console.error(e)
