@@ -125,18 +125,32 @@ app.add_middleware(
 
 @app.post("/api/login", response_model=Token)
 async def login(request: LoginRequest):
-    hashed_password = get_stored_hash()
-    if not verify_password(request.password, hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        hashed_password = get_stored_hash()
+        if not hashed_password:
+             logger.error("Auth file not found or corrupted")
+             return fail(msg="Login service unavailable", code=Code.INTERNAL_ERROR)
+
+        if not verify_password(request.password, hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": "admin"}, expires_delta=access_token_expires
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": "admin"}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+        return {"access_token": access_token, "token_type": "bearer"}
+    except Exception as e:
+        logger.error(f"Login failed: {str(e)}", exc_info=True)
+        # 如果是 HTTPException 直接抛出，否则转为 500
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login service error"
+        )
 
 @app.post("/api/password/change", dependencies=[Depends(get_current_user)])
 async def change_password(request: PasswordChangeRequest):
