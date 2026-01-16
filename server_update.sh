@@ -29,6 +29,11 @@ if [ -d "backend/backend.log" ]; then
 fi
 
 # 2. 重新构建并启动
+echo -e "${GREEN}正在深度清理旧容器...${NC}"
+
+# 停止并删除容器，清理匿名卷 (关键步骤：彻底清除旧的错误状态)
+docker compose down -v
+
 echo -e "${GREEN}正在重新构建并重启服务...${NC}"
 # 使用 --build 确保镜像被重新构建
 docker compose up -d --build
