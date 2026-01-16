@@ -23,7 +23,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("backend.log", encoding='utf-8'),
+        # 移除文件日志，避免 Docker 挂载目录冲突
+        # logging.FileHandler("backend.log", encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
