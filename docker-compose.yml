@@ -29,7 +29,7 @@ services:
     networks:
       - cms-network
     restart: always
-    volumes:
+    # volumes:
       # 移除单个文件的挂载，避免 Docker 自动将其创建为目录
       # - ./backend/backend.log:/app/backend.log
 
