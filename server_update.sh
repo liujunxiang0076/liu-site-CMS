@@ -16,6 +16,12 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# 1.5 清理可能存在的错误目录 (修复 backend.log 报错)
+if [ -d "backend/backend.log" ]; then
+    echo "检测到 backend.log 错误目录，正在自动清理..."
+    rm -rf backend/backend.log
+fi
+
 # 2. 重新构建并启动
 echo -e "${GREEN}正在重新构建并重启服务...${NC}"
 # 使用 --build 确保镜像被重新构建
