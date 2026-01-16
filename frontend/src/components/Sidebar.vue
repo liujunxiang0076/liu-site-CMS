@@ -148,6 +148,9 @@ const handleBackgroundClick = (event: MouseEvent) => {
   const target = event.target as HTMLElement
   if (target.closest('.el-tree-node__content')) return
   
+  // 如果点击的是 header 区域（例如操作按钮），也不要清除选中状态
+  if (target.closest('.header')) return
+
   if (treeRef.value) {
     treeRef.value.setCurrentKey(null) // 清除高亮
   }
