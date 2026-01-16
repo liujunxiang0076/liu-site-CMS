@@ -15,6 +15,9 @@ RUN pnpm install
 # 复制源码
 COPY . .
 
+# 增加 Node 内存限制 (关键修复)
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 # 构建
 RUN pnpm build
 
