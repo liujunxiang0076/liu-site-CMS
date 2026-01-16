@@ -14,9 +14,20 @@ from core.response import success, fail, Code
 # 导入自定义工具类
 from core.github_client import GitHubClient
 from core.image_uploader import TelegramUploader
+from core.auth import (
+    LoginRequest, PasswordChangeRequest, Token,
+    verify_password, get_stored_hash, create_access_token,
+    update_password, get_current_user, init_auth_file,
+    ACCESS_TOKEN_EXPIRE_MINUTES
+)
+from fastapi import Depends, status
+from datetime import timedelta
 
 # 1. 加载配置
 load_dotenv()
+
+# 初始化 Auth 文件
+init_auth_file()
 
 # 配置日志
 logging.basicConfig(
@@ -110,9 +121,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Auth 接口 ---
+
+@app.post("/api/login", response_model=Token)
+async def login(request: LoginRequest):
+    hashed_password = get_stored_hash()
+    if not verify_password(request.password, hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": "admin"}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/api/password/change", dependencies=[Depends(get_current_user)])
+async def change_password(request: PasswordChangeRequest):
+    hashed_password = get_stored_hash()
+    if not verify_password(request.current_password, hashed_password):
+        return fail(msg="当前密码错误", code=Code.PARAM_ERROR)
+    
+    update_password(request.new_password)
+    return success(msg="密码修改成功")
+
 # --- API 接口 ---
 
-@app.get("/api/version")
+@app.get("/api/version", dependencies=[Depends(get_current_user)])
 def get_version():
     """获取当前数据版本号 (Latest Commit SHA)"""
     try:
@@ -183,7 +220,7 @@ def get_articles(force_refresh: bool = False):
         logger.error(f"获取文章列表失败: {str(e)}", exc_info=True)
         return fail(msg=f"获取文章列表失败: {str(e)}", code=Code.INTERNAL_ERROR)
 
-@app.get("/api/article/detail")
+@app.get("/api/article/detail", dependencies=[Depends(get_current_user)])
 def get_article_detail(path: str, force_refresh: bool = False):
     try:
         cache_key = f"cms:article:{path}"
@@ -260,7 +297,7 @@ def save_to_github(item: SaveArticleRequest):
         return fail(msg=f"保存失败: {str(e)}", code=Code.INTERNAL_ERROR)
 
 # ... (image upload unchanged) ...
-@app.post("/api/upload/image")
+@app.post("/api/upload/image", dependencies=[Depends(get_current_user)])
 async def upload_image(file: UploadFile = File(...)):
     try:
         # 1. 验证文件类型
@@ -301,7 +338,7 @@ def delete_article(item: DeleteArticleRequest):
         return fail(msg=f"删除操作失败: {str(e)}", code=Code.GITHUB_ERROR)
 
 # 新增：重命名接口 (GitHub API 逻辑：新建+删除)
-@app.post("/api/article/rename")
+@app.post("/api/article/rename", dependencies=[Depends(get_current_user)])
 def rename_article(item: RenameArticleRequest):
     try:
         # 1. 获取内容
@@ -339,4 +376,4 @@ def rename_article(item: RenameArticleRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=3000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
