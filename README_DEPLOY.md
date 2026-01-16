@@ -1,60 +1,61 @@
 # 部署指南
 
-本项目采用 **Docker Compose** 进行部署。你需要将源码上传到服务器，并在服务器上进行构建和运行。
+## 推荐方式：使用 Git 进行部署
 
-## 1. 前置要求
+相比于手动上传整个文件夹，使用 **Git** 是最简单、最高效的方式。你只需要在服务器上拉取代码即可，每次更新只需几秒钟。
 
-- 服务器需安装 **Docker** 和 **Docker Compose** (通常包含在 Docker Desktop 或 Docker Engine 中)。
+### 1. 首次部署
 
-## 2. 部署步骤
+1.  **在服务器上克隆代码**
+    ```bash
+    # 替换为你的仓库地址
+    git clone https://github.com/your-username/liu-site-CMS.git
+    cd liu-site-CMS
+    ```
 
-### 2.1 上传代码
-将整个项目目录上传至服务器。
+2.  **配置环境变量**
+    进入 `backend` 目录，创建 `.env` 文件。
+    ```bash
+    cd backend
+    cp .env.example .env
+    vim .env  # 填入 GitHub Token
+    cd ..     # 返回根目录
+    ```
 
-### 2.2 配置环境变量
-在服务器上，进入 `backend` 目录，创建 `.env` 文件并填入必要的配置（如 GitHub Token）。
+3.  **启动服务**
+    给予脚本执行权限并运行：
+    ```bash
+    chmod +x deploy.sh server_update.sh
+    ./deploy.sh
+    ```
+
+---
+
+### 2. 后续更新
+
+当你本地修改了代码并 `git push` 后，在服务器上只需运行更新脚本：
 
 ```bash
-cd backend
-cp .env.example .env
-vim .env
+./server_update.sh
 ```
 
-### 2.3 启动服务
-在项目根目录下，运行部署脚本：
+这个脚本会自动执行以下操作：
+1.  `git pull` 拉取最新代码。
+2.  `docker compose up -d --build` 重新构建并重启服务。
+3.  清理旧的 Docker 镜像。
 
-**Linux/Mac:**
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
+---
 
-**或者手动运行 Docker 命令:**
-```bash
-docker compose up -d --build
-```
+## 备选方式：手动上传
 
-此命令会自动构建前端和后端镜像，并启动所有服务（前端、后端、Redis）。
+如果你不使用 Git，也可以手动上传文件。
 
-## 3. 访问服务
+1.  将项目文件夹压缩为 `zip`。
+2.  上传到服务器并解压。
+3.  配置 `backend/.env`。
+4.  运行 `./deploy.sh`。
 
-- **前端页面**: `http://<服务器IP>`
-- **后端 API**: `http://<服务器IP>:3000`
+## 常用命令
 
-## 4. 维护命令
-
-- **查看日志**:
-  ```bash
-  docker compose logs -f
-  ```
-- **停止服务**:
-  ```bash
-  docker compose down
-  ```
-- **重启服务**:
-  ```bash
-  docker compose restart
-  ```
-- **更新代码**:
-  1. 拉取最新代码 (git pull) 或 重新上传代码
-  2. 重新运行 `./deploy.sh` (它会重新构建镜像)
+- **查看日志**: `docker compose logs -f`
+- **停止服务**: `docker compose down`

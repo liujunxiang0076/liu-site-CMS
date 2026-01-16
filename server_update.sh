@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# 颜色定义
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+echo -e "${GREEN}开始更新服务...${NC}"
+
+# 1. 拉取最新代码
+echo "正在从 Git 拉取最新代码..."
+git pull
+
+# 检查 git pull 是否成功
+if [ $? -ne 0 ]; then
+    echo "Git 拉取失败，请检查网络或冲突。"
+    exit 1
+fi
+
+# 2. 重新构建并启动
+echo -e "${GREEN}正在重新构建并重启服务...${NC}"
+# 使用 --build 确保镜像被重新构建
+docker compose up -d --build
+
+# 3. 清理无用的旧镜像 (可选，释放空间)
+docker image prune -f
+
+echo -e "${GREEN}更新完成！${NC}"
