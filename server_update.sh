@@ -8,6 +8,9 @@ echo -e "${GREEN}开始更新服务...${NC}"
 
 # 1. 拉取最新代码
 echo "正在从 Git 拉取最新代码..."
+# 强制重置本地修改，确保脚本自身也能更新
+git fetch --all
+git reset --hard origin/main
 git pull
 
 # 检查 git pull 是否成功
