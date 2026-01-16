@@ -40,15 +40,17 @@ def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 def init_auth_file():
-    # 优先从环境变量获取初始密码，如果没有则使用默认值
-    env_password = os.getenv("ADMIN_PASSWORD", "admin123")
+    # 优先从 ADMIN_PASSWORD 获取
+    env_password = os.getenv("ADMIN_PASSWORD")
+    if not env_password:
+        logger.info(f"请在.env中配置ADMIN_PASSWORD或SECRET_KEY")
     
     # 如果 auth.json 不存在，直接创建
     if not os.path.exists(AUTH_FILE):
         default_hash = get_password_hash(env_password)
         with open(AUTH_FILE, "w") as f:
             json.dump({"hashed_password": default_hash}, f)
-        logger.info(f"Initialized auth.json with password from {'env' if os.getenv('ADMIN_PASSWORD') else 'default'}.")
+        logger.info(f"Initialized auth.json with password from {'ADMIN_PASSWORD' if env_password else 'SECRET_KEY'}.")
     else:
         # 可选：如果环境变量存在，是否强制更新密码？
         # 为了方便用户重置，这里添加一个逻辑：如果设置了 FORCE_RESET_PASSWORD=true，则重置
