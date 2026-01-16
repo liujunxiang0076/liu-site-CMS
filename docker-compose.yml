@@ -5,7 +5,7 @@ services:
     build: ./frontend
     container_name: cms-frontend
     ports:
-      - "8080:80"
+      - "2912:80"
     depends_on:
       - backend
     networks:
