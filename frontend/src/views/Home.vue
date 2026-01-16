@@ -230,7 +230,50 @@ const fetchList = async (forceRefresh: any = false) => {
   try {
     // 此时 res 直接就是后端返回的数据，因为 client.ts 做了拦截处理
     const res = await articleApi.getList(isForce)
-    treeData.value = res.data
+    let newTreeData = res.data
+
+    // --- 核心修复：防止刷新列表导致本地新建的草稿丢失 ---
+    try {
+      // 1. 从 IndexedDB 获取所有本地草稿
+      const localArticles = await storage.getAllLocalArticles();
+      
+      // 2. 遍历本地草稿，将其作为虚拟节点插入到新列表中
+      localArticles.forEach(draft => {
+        // 既然是本地草稿，说明还没同步到后端，列表中肯定没有（除非重名冲突，insertNodeToTree 暂时没处理去重，但问题不大）
+        // 从 path 中提取文件名
+        const fileName = draft.path.split('/').pop() || `${draft.title}.md`;
+        
+        // 构造虚拟节点
+        const virtualNode = {
+          id: draft.id,
+          name: fileName,
+          path: draft.path,
+          type: 'file',
+          isDraft: true,
+          isVirtual: true,
+          isLocal: true
+        };
+        
+        // 提取父路径
+        const parentPath = draft.path.substring(0, draft.path.lastIndexOf('/'));
+        
+        // 3. 插入到树中
+        const success = insertNodeToTree(newTreeData, parentPath, virtualNode);
+        
+        // 兜底：如果没找到父目录（比如根目录），直接放最前面
+        if (!success && (parentPath === 'src/posts' || parentPath === 'src' || !parentPath)) {
+          // 避免重复添加 (简单的排重)
+          const exists = newTreeData.some((n: any) => n.path === virtualNode.path);
+          if (!exists) {
+            newTreeData.unshift(virtualNode);
+          }
+        }
+      });
+    } catch (e) {
+      console.error('合并本地草稿失败:', e);
+    }
+
+    treeData.value = newTreeData
     // @ts-ignore
     isDataFromCache.value = !!res.fromCache
   } finally {
@@ -723,7 +766,14 @@ const insertNodeToTree = (nodes: any[], targetPath: string, newNode: any): boole
     // 找到目标文件夹
     if (node.path === targetPath && node.type === 'folder') {
       if (!node.children) node.children = [];
-      node.children.unshift(newNode);
+      
+      // 避免重复插入
+      const exists = node.children.some((child: any) => child.path === newNode.path);
+      if (!exists) {
+        node.children.unshift(newNode);
+        // 如果需要排序，可以在这里调用 sortNodes
+        // node.children = sortNodes(node.children); 
+      }
       return true;
     }
 
