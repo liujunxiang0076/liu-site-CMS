@@ -26,6 +26,9 @@
           <el-icon @click="emit('refresh')" title="刷新列表">
             <Refresh />
           </el-icon>
+          <el-icon @click="emit('settings')" title="设置">
+            <Setting />
+          </el-icon>
         </div>
       </div>
 
