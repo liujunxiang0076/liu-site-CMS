@@ -13,6 +13,9 @@ git fetch --all
 git reset --hard origin/main
 git pull
 
+# 1.1 赋予自身执行权限 (防止更新后权限丢失)
+chmod +x server_update.sh deploy.sh
+
 # 检查 git pull 是否成功
 if [ $? -ne 0 ]; then
     echo "Git 拉取失败，请检查网络或冲突。"
