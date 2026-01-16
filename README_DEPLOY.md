@@ -2,18 +2,35 @@
 
 ## 常见问题解决
 
-### 🔴 内存不足 (JavaScript heap out of memory)
-如果你的服务器内存较小（如 1GB 或 512MB），在构建前端时可能会报错。
-请运行项目根目录下的 `enable_swap.sh` 脚本来开启虚拟内存：
+### 🔴 端口冲突 (Address already in use)
+报错 `failed to bind host port 0.0.0.0:80/tcp` 说明服务器的 **80** 端口被占用了（可能是 Nginx/Apache）。
 
+**解决方法 1：修改端口（推荐）**
+我们已经默认将端口修改为 **8080**。
+- 访问地址变为：`http://服务器IP:8080`
+
+**解决方法 2：释放 80 端口**
+如果你一定要用 80 端口，需要先停止占用该端口的程序：
 ```bash
-# 在服务器上执行
-chmod +x enable_swap.sh
-./enable_swap.sh
-```
-开启 Swap 后，再次运行更新脚本即可。
+# 查看谁占用了 80 端口
+sudo netstat -tulpn | grep :80
 
----
+# 停止相关服务 (例如 nginx)
+sudo systemctl stop nginx
+# 或者杀掉进程
+sudo kill -9 <PID>
+```
+然后修改 `docker-compose.yml` 将 `8080:80` 改回 `80:80`。
+
+### 🔴 内存不足
+... (保持原有内容)
 
 ## 0. 服务器环境准备
+... (保持原有内容)
+
+## 4. 验证与访问
+
+*   **前端访问**: `http://你的服务器IP:8080`
+*   **后端 API**: `http://你的服务器IP:3000/docs`
+
 ... (保持原有内容)
