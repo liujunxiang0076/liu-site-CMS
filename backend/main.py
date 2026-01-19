@@ -285,8 +285,24 @@ def save_to_github(item: SaveArticleRequest):
         # 判断新建还是更新
         if not item.sha or item.sha in ["", "new"]:
             logger.info(f"正在新建文件: {item.path}")
-            res = client.repo.create_file(**params)
-            action = "创建"
+            try:
+                res = client.repo.create_file(**params)
+                action = "创建"
+            except Exception as create_e:
+                # 容错处理：如果报错 "sha wasn't supplied" (422)，说明文件已存在，尝试获取 SHA 并转为更新
+                if "sha" in str(create_e) and "supplied" in str(create_e) and "422" in str(create_e):
+                    logger.warning(f"文件已存在但未提供 SHA，尝试自动修复: {item.path}")
+                    try:
+                        existing_file = client.repo.get_contents(item.path)
+                        params["sha"] = existing_file.sha
+                        res = client.repo.update_file(**params)
+                        action = "更新 (自动修复)"
+                    except Exception as inner_e:
+                        # 如果修复过程中再次失败（如获取失败），抛出原始错误
+                        logger.error(f"自动修复失败: {str(inner_e)}")
+                        raise create_e
+                else:
+                    raise create_e
         else:
             logger.info(f"正在更新文件: {item.path} (SHA: {item.sha})")
             params["sha"] = item.sha
