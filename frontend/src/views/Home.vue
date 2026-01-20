@@ -81,6 +81,37 @@ const originalContent = ref('')
 const localSavedContent = ref('') // 新增：本地保存的内容快照
 const selectedNode = ref<any>(null) // 统一记录当前选中的节点
 const autoSaveStatus = ref('') // 自动保存状态提示
+const settingsVisible=ref(false)
+const passwordForm = ref({
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+const strengthScore = ref(0)
+const strengthColor = ref('')
+const strengthText = ref('')
+const isChangingPassword = ref(false)
+
+const checkStrength = (val: string) => {
+  let score = 0
+  if (val.length >= 6) score += 20
+  if (/[A-Z]/.test(val)) score += 20
+  if (/[a-z]/.test(val)) score += 20
+  if (/[0-9]/.test(val)) score += 20
+  if (/[^A-Za-z0-9]/.test(val)) score += 20
+
+  strengthScore.value = score
+  if (score < 40) {
+    strengthColor.value = '#F56C6C'
+    strengthText.value = '弱'
+  } else if (score < 80) {
+    strengthColor.value = '#E6A23C'
+    strengthText.value = '中'
+  } else {
+    strengthColor.value = '#67C23A'
+    strengthText.value = '强'
+  }
+}
 
 const currentArticle = ref<{
   id?: string; // 本地文章ID
@@ -784,6 +815,36 @@ const insertNodeToTree = (nodes: any[], targetPath: string, newNode: any): boole
   }
   return false;
 }
+
+// 8. 密码修改 (对接后端接口)
+const handleChangePassword = async () => {
+  if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
+    ElMessage.warning('两次输入的密码不一致')
+    return
+  }
+  if (strengthScore.value < 40) {
+    ElMessage.warning('密码强度太低，请使用更复杂的密码')
+    return
+  }
+
+  isChangingPassword.value = true
+  try {
+    await articleApi.changePassword(passwordForm.value)
+    ElMessage.success('密码修改成功')
+    settingsVisible.value = false
+    passwordForm.value = {
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    }
+  } catch (err: any) {
+    const msg = err.response?.data?.msg || '密码修改失败'
+    ElMessage.error(msg)
+  } finally {
+    isChangingPassword.value = false
+  }
+}
+
 
 onMounted(() => {
   fetchList()
