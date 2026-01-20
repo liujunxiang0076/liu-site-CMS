@@ -91,7 +91,9 @@ const strengthScore = ref(0)
 const strengthColor = ref('')
 const strengthText = ref('')
 const isChangingPassword = ref(false)
-
+const openSettings = () => {
+  settingsVisible.value = true
+}
 const checkStrength = (val: string) => {
   let score = 0
   if (val.length >= 6) score += 20
