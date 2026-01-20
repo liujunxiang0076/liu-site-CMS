@@ -139,5 +139,18 @@ export const articleApi = {
   uploadImage: (formData: FormData) => 
     apiClient.post<any, ApiResponse<{ url: string }>>('/upload/image', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+
+  // 改变密码
+  changePassword: async (data: { currentPassword: string; newPassword: string }) => {
+    const res = await apiClient.post<any, ApiResponse<null>>('/api/password/change', {
+      current_password: data.currentPassword,
+      new_password: data.newPassword
     })
+    if (res.code === 200) {
+      // 密码改变后，需要重新登录
+      await ApiCache.remove('cms_user')
+    }
+    return res
+  }
 }
