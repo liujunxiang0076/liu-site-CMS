@@ -18,3 +18,4 @@ pnpm-debug.log*
 
 # System
 .DS_Store
+backend/auth.json
