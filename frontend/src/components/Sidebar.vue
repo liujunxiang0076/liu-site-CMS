@@ -29,6 +29,9 @@
           <el-icon @click="emit('settings')" title="设置">
             <Setting />
           </el-icon>
+          <el-icon @click="emit('logout')" title="退出登录" class="logout-icon">
+            <SwitchButton />
+          </el-icon>
         </div>
       </div>
 
@@ -84,7 +87,7 @@
 import { ref, reactive } from 'vue'
 import { 
   DocumentAdd, FolderAdd, Refresh, Edit, Delete, 
-  ArrowLeft, ArrowRight // 新增图标
+  ArrowLeft, ArrowRight, Setting, SwitchButton // 新增图标
 } from '@element-plus/icons-vue'
 
 // --- 新增状态 ---
@@ -98,7 +101,7 @@ defineProps<{
 }>()
 
 // 定义事件
-const emit = defineEmits(['select', 'create-article', 'create-folder', 'refresh', 'rename', 'delete', 'clear-selection'])
+const emit = defineEmits(['select', 'create-article', 'create-folder', 'refresh', 'rename', 'delete', 'clear-selection', 'settings', 'logout'])
 
 const treeRef = ref()
 defineExpose({

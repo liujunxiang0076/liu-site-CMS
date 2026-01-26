@@ -2,7 +2,7 @@
   <div class="cms-layout">
     <Sidebar ref="sidebarRef" :tree-data="treeData" :loading="isSideLoading" :is-from-cache="isDataFromCache" @select="handleSelectArticle"
       @create-article="handleNewArticle" @create-folder="handleNewFolder" @refresh="() => fetchList(true)" @rename="handleRename"
-      @delete="handleDelete" @clear-selection="handleClearSelection" @settings="openSettings" />
+      @delete="handleDelete" @clear-selection="handleClearSelection" @settings="openSettings" @logout="handleLogout" />
     
     <el-dialog v-model="settingsVisible" title="安全设置" width="400px" append-to-body v-if="typeof settingsVisible !== 'undefined'">
       <el-form :model="passwordForm" label-position="top">
@@ -95,6 +95,26 @@ const isChangingPassword = ref(false)
 const openSettings = () => {
   settingsVisible.value = true
 }
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    
+    // 清除 Token 和 缓存
+    localStorage.removeItem('token')
+    await ApiCache.clear()
+    
+    // 跳转登录页
+    window.location.href = '/login'
+  } catch (e) {
+    // 用户取消，不做任何操作
+  }
+}
+
 const checkStrength = (val: string) => {
   let score = 0
   if (val.length >= 6) score += 20
