@@ -143,7 +143,8 @@ export const articleApi = {
 
   // 改变密码
   changePassword: async (data: { currentPassword: string; newPassword: string }) => {
-    const res = await apiClient.post<any, ApiResponse<null>>('/api/password/change', {
+    // 注意：apiClient 已经配置了 baseURL 为 /api，所以这里不要再加 /api 前缀
+    const res = await apiClient.post<any, ApiResponse<null>>('/password/change', {
       current_password: data.currentPassword,
       new_password: data.newPassword
     })
