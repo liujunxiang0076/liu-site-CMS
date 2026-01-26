@@ -37,7 +37,13 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    if not hashed_password:
+        return False
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        logger.error(f"Password verification failed: {e}")
+        return False
 
 def init_auth_file():
     # 优先从 ADMIN_PASSWORD 获取

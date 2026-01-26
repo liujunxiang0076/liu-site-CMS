@@ -63,12 +63,25 @@ apiClient.interceptors.response.use(
       window.location.href = '/login';
       return Promise.reject(error);
     }
+    
+    // 处理 422 参数校验错误
+    if (error.response?.status === 422) {
+      const detail = error.response.data.detail;
+      const msg = Array.isArray(detail) 
+        ? detail.map((d: any) => `${d.loc.join('.')}: ${d.msg}`).join('; ')
+        : (detail || '参数校验失败');
+      ElMessage.error(`参数错误: ${msg}`);
+      return Promise.reject(error);
+    }
+
     // @ts-ignore
     if (error.config?.skipErrorHandle) {
        return Promise.reject(error);
     }
+    
     // 这里的 error 处理的是网络层面的（如 500 服务器崩了或断网）
-    ElMessage.error('服务器响应失败，请联系管理员');
+    const errorMsg = error.response?.data?.msg || error.response?.data?.detail || '服务器响应失败，请联系管理员';
+    ElMessage.error(errorMsg);
     return Promise.reject(error);
   }
 );
