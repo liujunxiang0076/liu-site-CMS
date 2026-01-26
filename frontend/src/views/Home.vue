@@ -61,6 +61,7 @@ import Sidebar from '@/components/Sidebar.vue'
 import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/style.css';
 import { articleApi } from '@/api/article'
+import { ApiCache } from '@/utils/apiCache'
 import { v4 as uuidv4 } from 'uuid';
 import * as storage from '@/utils/storage';
 import { resolveTargetDir } from '@/utils/path';
@@ -832,13 +833,18 @@ const handleChangePassword = async () => {
   isChangingPassword.value = true
   try {
     await articleApi.changePassword(passwordForm.value)
-    ElMessage.success('密码修改成功')
+    ElMessage.success('密码修改成功，请重新登录')
     settingsVisible.value = false
-    passwordForm.value = {
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: ''
-    }
+    
+    // 清除 Token 和 缓存
+    localStorage.removeItem('token')
+    await ApiCache.clear()
+    
+    // 强制跳转登录页
+    setTimeout(() => {
+        window.location.href = '/login'
+    }, 1000)
+
   } catch (err: any) {
     const msg = err.response?.data?.msg || '密码修改失败'
     ElMessage.error(msg)
