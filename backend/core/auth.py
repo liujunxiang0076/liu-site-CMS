@@ -13,7 +13,11 @@ from pydantic import BaseModel
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-it")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 12 * 60  # 12 hours
-AUTH_FILE = "auth.json"
+
+# 核心修复：使用绝对路径，避免不同启动方式（docker vs local）导致的路径不一致
+# core/auth.py -> core/ -> backend/
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+AUTH_FILE = os.path.join(BASE_DIR, "auth.json")
 
 # 初始化
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
