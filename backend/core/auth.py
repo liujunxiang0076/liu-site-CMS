@@ -62,13 +62,27 @@ def init_auth_file():
             json.dump({"hashed_password": default_hash}, f)
         logger.info(f"Initialized auth.json with password from {'ADMIN_PASSWORD' if env_password else 'SECRET_KEY'}.")
     else:
-        # 可选：如果环境变量存在，是否强制更新密码？
-        # 为了方便用户重置，这里添加一个逻辑：如果设置了 FORCE_RESET_PASSWORD=true，则重置
-        if os.getenv("FORCE_RESET_PASSWORD", "false").lower() == "true":
-             default_hash = get_password_hash(env_password)
-             with open(AUTH_FILE, "w") as f:
+        # 1. 读取现有文件内容
+        try:
+            with open(AUTH_FILE, "r") as f:
+                data = json.load(f)
+                
+            # 2. 如果文件内容为空或格式错误，强制重置
+            if not data or "hashed_password" not in data:
+                 raise ValueError("Invalid auth file content")
+
+            # 3. 只有当明确设置 FORCE_RESET_PASSWORD=true 时才覆盖
+            if os.getenv("FORCE_RESET_PASSWORD", "false").lower() == "true":
+                 default_hash = get_password_hash(env_password)
+                 with open(AUTH_FILE, "w") as f:
+                    json.dump({"hashed_password": default_hash}, f)
+                 logger.info("Forced reset password from env.")
+                 
+        except Exception as e:
+            logger.warning(f"Auth file corrupted or invalid ({e}), resetting to default.")
+            default_hash = get_password_hash(env_password)
+            with open(AUTH_FILE, "w") as f:
                 json.dump({"hashed_password": default_hash}, f)
-             logger.info("Forced reset password from env.")
 
 def get_stored_hash():
     if not os.path.exists(AUTH_FILE):
