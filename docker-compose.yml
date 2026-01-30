@@ -30,8 +30,9 @@ services:
       - cms-network
     restart: always
     volumes:
-      # 持久化 auth.json，确保重启/重建容器后密码不丢失
-      - ./backend/auth.json:/app/auth.json
+      # 持久化 auth_data.json，确保重启/重建容器后密码不丢失
+      # 注意：使用了新文件名以避免与 git 仓库中的 auth.json 冲突
+      - ./backend/auth_data.json:/app/auth_data.json
       # 移除单个文件的挂载，避免 Docker 自动将其创建为目录
       # - ./backend/backend.log:/app/backend.log
 

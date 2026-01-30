@@ -6,6 +6,19 @@ NC='\033[0m'
 
 echo -e "${GREEN}开始更新服务...${NC}"
 
+# 0. 备份重要数据 (防止 Git 更新删除配置文件)
+# 迁移逻辑：如果发现旧的 auth.json 但没有新的 auth_data.json，则尝试迁移
+if [ -f "backend/auth.json" ] && [ ! -f "backend/auth_data.json" ]; then
+    echo "正在迁移旧的密码配置 auth.json -> auth_data.json..."
+    cp backend/auth.json backend/auth_data.json
+fi
+
+# 正常备份流程
+if [ -f "backend/auth_data.json" ]; then
+    echo "正在备份 auth_data.json..."
+    cp backend/auth_data.json backend/auth_data.json.bak
+fi
+
 # 1. 拉取最新代码
 echo "正在从 Git 拉取最新代码..."
 # 强制重置本地修改，确保脚本自身也能更新
@@ -13,7 +26,13 @@ git fetch --all
 git reset --hard origin/main
 git pull
 
-# 1.1 赋予自身执行权限 (防止更新后权限丢失)
+# 1.1 恢复重要数据
+if [ -f "backend/auth_data.json.bak" ]; then
+    echo "正在恢复 auth_data.json..."
+    mv backend/auth_data.json.bak backend/auth_data.json
+fi
+
+# 1.2 赋予自身执行权限 (防止更新后权限丢失)
 chmod +x server_update.sh deploy.sh
 
 # 检查 git pull 是否成功

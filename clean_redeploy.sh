@@ -25,11 +25,23 @@ echo -e "${GREEN}3. 清理残留文件...${NC}"
 rm -rf backend/backend.log
 rm -rf backend/__pycache__
 
+# 3.1 备份 auth.json
+if [ -f "backend/auth.json" ]; then
+    echo "备份 auth.json..."
+    cp backend/auth.json backend/auth.json.bak
+fi
+
 # 4. 强制同步最新代码
 echo -e "${GREEN}4. 同步最新代码...${NC}"
 git fetch --all
 git reset --hard origin/main
 chmod +x deploy.sh server_update.sh clean_redeploy.sh
+
+# 4.1 恢复 auth.json
+if [ -f "backend/auth.json.bak" ]; then
+    echo "恢复 auth.json..."
+    mv backend/auth.json.bak backend/auth.json
+fi
 
 # 5. 重新部署
 echo -e "${GREEN}5. 开始重新部署...${NC}"
