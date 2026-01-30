@@ -23,7 +23,13 @@ fi
 # 强制清理错误的目录结构（如果存在）
 if [ -d "backend/auth_data.json" ]; then
     echo "检测到 auth_data.json 是目录，正在清理..."
+    # 尝试普通删除
     rm -rf backend/auth_data.json
+    # 如果删除失败（权限问题），尝试用 sudo (如果脚本以非root运行)
+    if [ -d "backend/auth_data.json" ]; then
+        echo "普通删除失败，尝试 sudo 删除..."
+        sudo rm -rf backend/auth_data.json
+    fi
 fi
 
 if [ ! -f "backend/auth_data.json" ]; then
