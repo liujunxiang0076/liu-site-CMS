@@ -129,7 +129,10 @@ async def login(request: LoginRequest):
         hashed_password = get_stored_hash()
         if not hashed_password:
              logger.error("Auth file not found or corrupted")
-             return fail(msg="Login service unavailable", code=Code.INTERNAL_ERROR)
+             raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Login service unavailable"
+             )
 
         if not verify_password(request.password, hashed_password):
             raise HTTPException(
@@ -142,11 +145,10 @@ async def login(request: LoginRequest):
             data={"sub": "admin"}, expires_delta=access_token_expires
         )
         return {"access_token": access_token, "token_type": "bearer"}
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Login failed: {str(e)}", exc_info=True)
-        # 如果是 HTTPException 直接抛出，否则转为 500
-        if isinstance(e, HTTPException):
-            raise e
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login service error"
