@@ -53,9 +53,11 @@ def verify_password(plain_password, hashed_password):
 def init_auth_file():
     # 优先从 ADMIN_PASSWORD 获取
     env_password = os.getenv("ADMIN_PASSWORD")
+    # 如果没有 ADMIN_PASSWORD，尝试使用 SECRET_KEY，如果都没有，使用默认值 'admin123'
     if not env_password:
-        logger.info(f"请在.env中配置ADMIN_PASSWORD或SECRET_KEY")
-    
+        env_password = os.getenv("SECRET_KEY", "admin123")
+        logger.info(f"未配置 ADMIN_PASSWORD，使用 SECRET_KEY 或默认密码作为初始密码")
+
     # 0. 检查是否是目录 (修复 Docker 挂载导致的目录问题)
     if os.path.exists(AUTH_FILE) and os.path.isdir(AUTH_FILE):
         logger.warning(f"检测到 {AUTH_FILE} 是一个目录（可能是 Docker 自动创建的），尝试删除并重新创建为文件。")
