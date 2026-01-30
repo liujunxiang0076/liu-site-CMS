@@ -19,6 +19,11 @@ if [ -f "backend/auth_data.json" ]; then
     cp backend/auth_data.json backend/auth_data.json.bak
 fi
 
+# 0.5 确保 auth_data.json 存在 (防止 Docker 自动创建为目录)
+if [ ! -f "backend/auth_data.json" ]; then
+    echo "{}" > backend/auth_data.json
+fi
+
 # 1. 拉取最新代码
 echo "正在从 Git 拉取最新代码..."
 # 强制重置本地修改，确保脚本自身也能更新

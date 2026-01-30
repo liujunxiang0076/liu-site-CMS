@@ -56,6 +56,16 @@ def init_auth_file():
     if not env_password:
         logger.info(f"请在.env中配置ADMIN_PASSWORD或SECRET_KEY")
     
+    # 0. 检查是否是目录 (修复 Docker 挂载导致的目录问题)
+    if os.path.exists(AUTH_FILE) and os.path.isdir(AUTH_FILE):
+        logger.warning(f"检测到 {AUTH_FILE} 是一个目录（可能是 Docker 自动创建的），尝试删除并重新创建为文件。")
+        try:
+            import shutil
+            shutil.rmtree(AUTH_FILE)
+        except Exception as e:
+            logger.error(f"无法删除目录 {AUTH_FILE}: {e}")
+            return # 无法继续
+
     # 如果 auth.json 不存在，直接创建
     if not os.path.exists(AUTH_FILE):
         default_hash = get_password_hash(env_password)
