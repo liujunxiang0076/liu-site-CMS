@@ -20,7 +20,14 @@ if [ -f "backend/auth_data.json" ]; then
 fi
 
 # 0.5 确保 auth_data.json 存在 (防止 Docker 自动创建为目录)
+# 强制清理错误的目录结构（如果存在）
+if [ -d "backend/auth_data.json" ]; then
+    echo "检测到 auth_data.json 是目录，正在清理..."
+    rm -rf backend/auth_data.json
+fi
+
 if [ ! -f "backend/auth_data.json" ]; then
+    echo "创建空的 auth_data.json..."
     echo "{}" > backend/auth_data.json
 fi
 
