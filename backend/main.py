@@ -100,6 +100,7 @@ class SaveArticleRequest(BaseModel):
 class DeleteArticleRequest(BaseModel):
     path: str
     sha: str
+    message: Optional[str] = None
 
 class RenameArticleRequest(BaseModel):
     old_path: str
@@ -107,11 +108,12 @@ class RenameArticleRequest(BaseModel):
     sha: str
     content: Optional[str] = None # 如果重命名时内容有变化可以一起传
 
-# 允许跨域的源
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# GitHub 分支配置
+GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
+
+# 允许跨域的源（支持多个域名，用逗号分隔）
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -123,36 +125,25 @@ app.add_middleware(
 
 # --- Auth 接口 ---
 
-@app.post("/api/login", response_model=Token)
+@app.post("/api/login")
 async def login(request: LoginRequest):
     try:
         hashed_password = get_stored_hash()
         if not hashed_password:
              logger.error("Auth file not found or corrupted")
-             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Login service unavailable"
-             )
+             return fail(msg="登录服务不可用", code=Code.INTERNAL_ERROR)
 
         if not verify_password(request.password, hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            return fail(msg="密码错误", code=Code.UNAUTHORIZED)
+
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": "admin"}, expires_delta=access_token_expires
         )
-        return {"access_token": access_token, "token_type": "bearer"}
-    except HTTPException as e:
-        raise e
+        return success(data={"access_token": access_token, "token_type": "bearer"}, msg="登录成功")
     except Exception as e:
         logger.error(f"Login failed: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Login service error"
-        )
+        return fail(msg="登录服务异常", code=Code.INTERNAL_ERROR)
 
 @app.post("/api/password/change", dependencies=[Depends(get_current_user)])
 async def change_password(request: PasswordChangeRequest):
@@ -190,7 +181,7 @@ def get_articles(force_refresh: bool = False):
                 return success(data=data, total=len(data), extra={"cache": "HIT"})
 
         # 获取全量文件树
-        tree = client.repo.get_git_tree("main", recursive=True)
+        tree = client.repo.get_git_tree(GITHUB_BRANCH, recursive=True)
         root = {"name": "Root", "children": []}
         folder_map = {"": root}
 
@@ -264,7 +255,7 @@ def get_article_detail(path: str, force_refresh: bool = False):
         logger.error(f"读取文件内容失败: {path} - {str(e)}", exc_info=True)
         return fail(msg=f"读取文件内容失败: {path}", code=Code.NOT_FOUND)
 
-@app.post("/api/article/save")
+@app.post("/api/article/save", dependencies=[Depends(get_current_user)])
 def save_to_github(item: SaveArticleRequest):
     try:
         # 1. 基础验证
@@ -281,7 +272,7 @@ def save_to_github(item: SaveArticleRequest):
             "path": item.path,
             "message": final_msg,
             "content": item.content,
-            "branch": "main"
+            "branch": GITHUB_BRANCH
         }
 
         # 判断新建还是更新
@@ -351,14 +342,16 @@ async def upload_image(file: UploadFile = File(...)):
 
 
 # 新增：删除接口
-@app.post("/api/article/delete")
+@app.post("/api/article/delete", dependencies=[Depends(get_current_user)])
 def delete_article(item: DeleteArticleRequest):
     try:
+        default_msg = f"CMS Delete: {os.path.basename(item.path)}"
+        commit_msg = item.message.strip() if item.message and item.message.strip() else default_msg
         client.repo.delete_file(
             path=item.path,
-            message=f"CMS Delete: {os.path.basename(item.path)}",
+            message=commit_msg,
             sha=item.sha,
-            branch="main"
+            branch=GITHUB_BRANCH
         )
         # 缓存清理
         delete_cache(CACHE_KEY_ARTICLES)
@@ -384,7 +377,7 @@ def rename_article(item: RenameArticleRequest):
             path=item.new_path,
             message=f"CMS Rename (Create): {item.old_path} -> {item.new_path}",
             content=content,
-            branch="main"
+            branch=GITHUB_BRANCH
         )
 
         # 3. 删除旧路径文件
@@ -392,7 +385,7 @@ def rename_article(item: RenameArticleRequest):
             path=item.old_path,
             message=f"CMS Rename (Delete): {item.old_path}",
             sha=item.sha,
-            branch="main"
+            branch=GITHUB_BRANCH
         )
         
         # 缓存清理
