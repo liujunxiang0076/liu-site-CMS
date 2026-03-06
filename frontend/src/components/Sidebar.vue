@@ -200,8 +200,8 @@ const handleNameConfirm = (data: any) => {
   position: relative;
   width: 260px;
   height: 100vh;
-  border-right: 1px solid #e8e8e8;
-  background: #ffffff; // 保持清爽白色
+  border-right: 1px solid #e4e8ee;
+  background: #f7f8fc;
   display: flex;
   flex-direction: column;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -228,7 +228,7 @@ const handleNameConfirm = (data: any) => {
       /* 自动贴边：向左收回一半多，只露个边 */
       right: -14px; 
       opacity: 0.3; // 贴边时保持高透明
-      background: #ffffff;
+      background: #f7f8fc;
       border: 1px solid #dcdfe6;
       color: #909399;
 
@@ -281,21 +281,21 @@ const handleNameConfirm = (data: any) => {
     }
   }
 
-  /* ... 保持你原有的其他样式不变 ... */
   .header {
-    padding: 12px 16px;
+    padding: 14px 16px 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #f0f0f0;
-    white-space: nowrap; // 防止标题换行
+    border-bottom: 1px solid #e8ecf2;
+    white-space: nowrap;
+    background: linear-gradient(180deg, #ffffff 0%, #f7f8fc 100%);
     
     .title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #666;
+      font-size: 12px;
+      font-weight: 700;
+      color: #8a94a6;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 1px;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -303,53 +303,71 @@ const handleNameConfirm = (data: any) => {
       .cache-dot {
         width: 6px;
         height: 6px;
-        background-color: #909399;
+        background-color: #e6a23c;
         border-radius: 50%;
         display: inline-block;
+        box-shadow: 0 0 0 2px rgba(230, 162, 60, 0.2);
       }
     }
 
     .actions {
       display: flex;
-      gap: 10px;
+      gap: 2px;
 
       .el-icon {
-        font-size: 16px;
-        color: #909399;
+        font-size: 15px;
+        color: #b0bac9;
         cursor: pointer;
-        transition: color 0.2s;
+        padding: 5px;
+        border-radius: 6px;
+        transition: all 0.2s;
 
         &:hover {
-          color: #42b883; // 悬浮变绿色
+          color: #4a7ee5;
+          background: rgba(74, 126, 229, 0.08);
         }
+      }
+
+      .logout-icon:hover {
+        color: #f56c6c;
+        background: rgba(245, 108, 108, 0.08);
       }
     }
   }
 
   .list-container {
     flex: 1;
-    overflow-x: hidden; // 隐藏横向滚动条
+    overflow-x: hidden;
     overflow-y: auto;
-    padding: 8px 4px;
+    padding: 8px 6px;
+
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: #dce0ea;
+      border-radius: 4px;
+    }
 
     :deep(.el-tree) {
       background: transparent;
 
       .el-tree-node__content {
-        height: 32px; // 适当放宽行高，更符合网页端审美
+        height: 34px;
         padding: 0 8px;
-        border-radius: 4px;
-        margin: 1px 4px;
+        border-radius: 6px;
+        margin: 1px 2px;
 
         &:hover {
-          background-color: #f5f7f9;
+          background-color: #eef1f8;
         }
       }
 
       .el-tree-node.is-current>.el-tree-node__content {
-        background-color: #e7f6ed !important; // 选中的浅绿色
-        color: #42b883;
-        font-weight: 500;
+        background: linear-gradient(135deg, #eef4ff 0%, #e8f0fe 100%) !important;
+        color: #4a7ee5;
+        font-weight: 600;
+        box-shadow: 0 1px 4px rgba(74, 126, 229, 0.12);
       }
     }
 
@@ -379,9 +397,10 @@ const handleNameConfirm = (data: any) => {
       .unsaved-dot {
         width: 6px;
         height: 6px;
-        background: #42b883;
+        background: #f5a623;
         border-radius: 50%;
         margin-left: 8px;
+        box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.2);
       }
 
       .inline-input {
@@ -397,7 +416,7 @@ const handleNameConfirm = (data: any) => {
       }
 
       &.is-virtual {
-        color: #42b883; // 本地文件夹显示为主题绿色
+        color: #4a7ee5; // 本地文件夹显示为主题绿色
         font-style: italic; // 斜体表示“未持久化”
 
         .label {
