@@ -37,7 +37,6 @@
             show-password
             size="large"
             class="password-input"
-            @keyup.enter="handleLogin"
           >
             <template #prefix>
               <el-icon class="input-icon"><Lock /></el-icon>
