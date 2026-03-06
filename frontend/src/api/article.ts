@@ -23,7 +23,7 @@ export const articleApi = {
         try {
           // 双重校验：检查后端版本
           const vRes = await apiClient.get<any, ApiResponse<{ version: string }>>('/version');
-          if (vRes.code === 200 && vRes.data.version === cached.version) {
+          if (vRes.data.version === cached.version) {
             console.log('Frontend Cache Hit: List');
             return { code: 200, msg: 'success', data: cached.data, total: cached.data.length, fromCache: true };
           }
@@ -57,8 +57,8 @@ export const articleApi = {
       const cached = await ApiCache.get<{ path: string, title: string, content: string }>(CACHE_KEY);
       if (cached) {
         try {
-          const vRes = await apiClient.get('/version');
-          if (vRes.status === 200 && vRes.data.version === cached.version) {
+          const vRes = await apiClient.get<any, ApiResponse<{ version: string }>>('/version');
+          if (vRes.data.version === cached.version) {
              console.log('Frontend Cache Hit: Detail', path);
              // 注意：这里缺少 SHA，如果依赖 SHA 进行编辑可能需要重新考虑。
              // 但通常 SHA 包含在 content_file 元数据里。
@@ -86,8 +86,8 @@ export const articleApi = {
     }>>('/article/detail', { params: { path, force_refresh: forceRefresh } });
 
     if (res.code === 200) {
-      apiClient.get('/version').then(vRes => {
-        if (vRes.status === 200) {
+      apiClient.get<any, ApiResponse<{ version: string }>>('/version').then(vRes => {
+        if (vRes.data?.version) {
            // 缓存整个 res 结构不太好，因为类型不匹配。
            // 构造一个包含 data 和 sha 的对象存入
            const cacheData = { 
