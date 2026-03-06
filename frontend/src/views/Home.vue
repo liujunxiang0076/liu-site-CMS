@@ -48,7 +48,35 @@
       </div>
 
       <div v-else class="empty-state">
-        <el-empty description="点选左侧文章开启编辑" />
+        <div class="welcome-card">
+          <div class="welcome-illustration">
+            <svg width="120" height="100" viewBox="0 0 120 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="10" y="20" width="100" height="70" rx="8" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5"/>
+              <rect x="20" y="10" width="80" height="65" rx="6" fill="#f0f4ff" stroke="#a5b4fc" stroke-width="1.5"/>
+              <rect x="30" y="2" width="60" height="60" rx="5" fill="white" stroke="#818cf8" stroke-width="1.5"/>
+              <line x1="40" y1="18" x2="80" y2="18" stroke="#c7d2fe" stroke-width="2" stroke-linecap="round"/>
+              <line x1="40" y1="26" x2="80" y2="26" stroke="#c7d2fe" stroke-width="2" stroke-linecap="round"/>
+              <line x1="40" y1="34" x2="70" y2="34" stroke="#c7d2fe" stroke-width="2" stroke-linecap="round"/>
+              <line x1="40" y1="42" x2="75" y2="42" stroke="#e0e7ff" stroke-width="2" stroke-linecap="round"/>
+              <line x1="40" y1="50" x2="65" y2="50" stroke="#e0e7ff" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="88" cy="72" r="16" fill="#4a7ee5" opacity="0.9"/>
+              <path d="M83 72L87 76L94 68" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h2 class="welcome-title">准备好开始创作了吗？</h2>
+          <p class="welcome-desc">从左侧选择一篇文章进行编辑，或新建一篇</p>
+          <div class="welcome-tips">
+            <div class="tip-item">
+              <span class="tip-key">点击</span>
+              <span class="tip-text">左侧文章开始编辑</span>
+            </div>
+            <div class="tip-divider"></div>
+            <div class="tip-item">
+              <span class="tip-key">⌘S</span>
+              <span class="tip-text">保存并推送至 GitHub</span>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -909,14 +937,15 @@ onMounted(() => {
       overflow: hidden; // 再次锁死
 
       .editor-header {
-        height: 54px; // 稍微加高一点，视觉更协调
+        height: 54px;
         padding: 0 20px;
         background: #fff;
-        border-bottom: 1px solid #e8e8e8;
+        border-bottom: 1px solid #eaecf2;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        flex-shrink: 0; // 确保头部不会被压缩
+        flex-shrink: 0;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 
         .header-actions {
           display: flex;
@@ -925,19 +954,23 @@ onMounted(() => {
           
           .autosave-status {
             font-size: 12px;
-            color: #999;
+            color: #b0bac9;
+            background: #f7f8fc;
+            padding: 3px 10px;
+            border-radius: 20px;
+            border: 1px solid #e8ecf2;
           }
         }
 
         .path-tag {
-          font-size: 13px;
-          color: #666;
-          background: #f0f2f5;
-          padding: 4px 10px;
-          border-radius: 4px;
-          font-family: 'Fira Code', monospace;
+          font-size: 12.5px;
+          color: #5a6278;
+          background: #f4f6fb;
+          padding: 5px 12px;
+          border-radius: 8px;
+          font-family: 'Fira Code', 'JetBrains Mono', monospace;
+          border: 1px solid #e8ecf2;
           
-          /* 状态点样式系统 */
           display: inline-flex;
           align-items: center;
           gap: 8px;
@@ -946,18 +979,18 @@ onMounted(() => {
           &::before {
             content: '';
             display: inline-block;
-            width: 12px;
-            height: 12px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             transition: all 0.3s ease;
+            flex-shrink: 0;
           }
 
-          /* 状态颜色定义 */
-          &.status-synced::before { background-color: #008000; }           /* 已同步 - 深绿色 RGB(0,128,0) */
-          &.status-syncing::before { background-color: #2196F3; }          /* 同步中 - 蓝色 */
-          &.status-modified-unsaved::before { background-color: #795548; } /* 修改未保存 - 棕色 */
-          &.status-modified-saved::before { background-color: #FFC107; }   /* 修改已保存 - 黄色 */
-          &.status-new::before { background-color: #F44336; }              /* 新建文章 - 红色 */
+          &.status-synced::before { background-color: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,0.2); }
+          &.status-syncing::before { background-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+          &.status-modified-unsaved::before { background-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.2); }
+          &.status-modified-saved::before { background-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.2); }
+          &.status-new::before { background-color: #ef4444; box-shadow: 0 0 0 2px rgba(239,68,68,0.2); }
         }
       }
 
@@ -975,7 +1008,94 @@ onMounted(() => {
       display: flex;
       align-items: center;
       justify-content: center;
+      background: linear-gradient(160deg, #f8faff 0%, #f3f4f8 100%);
+
+      .welcome-card {
+        text-align: center;
+        padding: 48px 56px;
+        background: white;
+        border-radius: 20px;
+        border: 1px solid #e8ecf8;
+        box-shadow: 0 4px 24px rgba(74, 126, 229, 0.06), 0 1px 4px rgba(0,0,0,0.04);
+        max-width: 420px;
+        animation: fadeInUp 0.5s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+
+        .welcome-illustration {
+          margin-bottom: 24px;
+          
+          svg {
+            filter: drop-shadow(0 4px 12px rgba(74, 126, 229, 0.15));
+          }
+        }
+
+        .welcome-title {
+          font-size: 20px;
+          font-weight: 700;
+          color: #1a2035;
+          margin: 0 0 10px;
+          letter-spacing: -0.3px;
+        }
+
+        .welcome-desc {
+          font-size: 14px;
+          color: #8a94a6;
+          margin: 0 0 28px;
+          line-height: 1.6;
+        }
+
+        .welcome-tips {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 16px;
+          padding: 14px 20px;
+          background: #f7f9ff;
+          border-radius: 10px;
+          border: 1px solid #e8ecf8;
+
+          .tip-divider {
+            width: 1px;
+            height: 20px;
+            background: #dde3f0;
+          }
+
+          .tip-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+
+            .tip-key {
+              background: white;
+              border: 1px solid #dde3f0;
+              border-radius: 6px;
+              padding: 2px 8px;
+              font-size: 12px;
+              font-weight: 600;
+              color: #4a7ee5;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+              white-space: nowrap;
+            }
+
+            .tip-text {
+              color: #8a94a6;
+              white-space: nowrap;
+            }
+          }
+        }
+      }
     }
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
