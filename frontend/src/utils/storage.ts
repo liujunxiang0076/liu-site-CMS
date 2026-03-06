@@ -2,8 +2,7 @@ import localforage from 'localforage';
 import CryptoJS from 'crypto-js';
 
 const STORE_NAME = 'cms_local_articles';
-// 在生产环境中，密钥应该由用户输入或后端下发，这里为了演示离线能力使用固定密钥
-const SECRET_KEY = 'cms_offline_secret_key_v1'; 
+const SECRET_KEY = import.meta.env.VITE_STORAGE_KEY || 'cms_offline_secret_key_v1';
 
 localforage.config({
   name: 'LiuSiteCMS',
