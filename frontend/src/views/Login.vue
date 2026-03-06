@@ -36,7 +36,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Lock } from '@element-plus/icons-vue'
-import axios from 'axios'
+import apiClient from '../api/client'
 
 const router = useRouter()
 const loading = ref(false)
@@ -52,25 +52,22 @@ const handleLogin = async () => {
 
   loading.value = true
   try {
-    // Assuming axios is configured with base URL in a global file, 
-    // but here I'll use direct path or import the client if available.
-    // Better to use the configured client but for now I'll use relative path which proxies to backend
-    // Checking client.ts might be better.
-    const res = await axios.post('/api/login', { password: loginForm.value.password })
-    
-    if (res.data.access_token) {
+    const res = await apiClient.post<any, any>('/login', { password: loginForm.value.password })
+
+    if (res.data?.access_token) {
       localStorage.setItem('token', res.data.access_token)
-      localStorage.setItem('token_expire', (Date.now() + 12 * 60 * 60 * 1000).toString()) // Client side check
+      localStorage.setItem('token_expire', (Date.now() + 12 * 60 * 60 * 1000).toString())
       ElMessage.success('登录成功')
       router.push('/')
     } else {
-       ElMessage.error('登录失败')
+      ElMessage.error('登录失败')
     }
   } catch (err: any) {
-    if (err.response && err.response.status === 401) {
+    const msg = err?.message || '登录服务异常'
+    if (msg.includes('密码错误') || msg.includes('Unauthorized')) {
       ElMessage.error('密码错误')
     } else {
-      ElMessage.error('登录服务异常')
+      ElMessage.error(msg)
     }
   } finally {
     loading.value = false
