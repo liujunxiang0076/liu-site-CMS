@@ -90,7 +90,7 @@ A lightweight, modern Content Management System designed for managing static blo
 
 ## 📦 部署（服务器 Docker）
 
-以下步骤适用于 **Linux 服务器**（推荐 Ubuntu / Debian / CentOS）。本项目使用 `docker compose` 一键构建前后端与 Redis。
+以下步骤适用于 **Linux 服务器**（推荐 Ubuntu / Debian / CentOS）。如果你不想拉整个仓库，可以只下载 `docker-compose.yml` 进行快捷部署（需使用已发布的镜像）。
 
 ### 1. 服务器环境准备
 
@@ -116,7 +116,39 @@ A lightweight, modern Content Management System designed for managing static blo
    ./enable_swap.sh
    ```
 
-### 2. 拉取代码并配置环境变量
+### 2. 快捷部署（不拉仓库）
+
+1. 创建目录并下载 `docker-compose.yml`：
+   ```bash
+   mkdir -p liu-site-cms && cd liu-site-cms
+   curl -fsSL https://github.com/liujunxiang0076/liu-site-CMS/blob/main/docker-compose.yml -o docker-compose.yml
+   ```
+
+2. 准备后端配置文件与认证文件：
+   ```bash
+   mkdir -p backend
+   curl -fsSL <你的env示例文件地址> -o backend/.env
+   echo "{}" > backend/auth_data.json
+   ```
+   编辑 `backend/.env`，重点填写：`GITHUB_TOKEN`（需要 `repo` 权限）、`REPO_NAME`（如 `username/your-blog`）、`SECRET_KEY`（务必修改）。
+
+3. 配置镜像并启动：
+   在当前目录新建 `.env`（用于 Docker Compose 变量），写入：
+   ```bash
+   DOCKER_IMAGE_FRONTEND=你的前端镜像
+   DOCKER_IMAGE_BACKEND=你的后端镜像
+   FRONTEND_PORT=2912
+   BACKEND_PORT=8000
+   TZ=Asia/Shanghai
+   ```
+   启动：
+   ```bash
+   docker compose up -d
+   ```
+
+说明：快捷部署依赖你已经将前后端镜像发布到镜像仓库。如果没有镜像，请使用“拉取代码并配置环境变量”方式进行构建部署。
+
+### 3. 拉取代码并配置环境变量
 
 1. 拉取项目：
    ```bash
@@ -135,7 +167,7 @@ A lightweight, modern Content Management System designed for managing static blo
    echo "{}" > backend/auth_data.json
    ```
 
-### 3. 启动 Docker（首次部署）
+### 4. 启动 Docker（首次部署）
 
 ```bash
 docker compose up -d --build
@@ -149,7 +181,7 @@ docker compose logs -f backend
 
 访问地址：前端 `http://服务器IP:2912`，后端 API `http://服务器IP:8000/docs`。
 
-### 4. 更新与重部署（可选）
+### 5. 更新与重部署（可选）
 
 1. **更新代码并重建**（保留认证数据）：
    ```bash
@@ -268,7 +300,7 @@ docker compose logs -f backend
 
 ## 📦 Deployment (Docker on Server)
 
-These steps are for **Linux servers**. This project uses `docker compose` to build frontend, backend, and Redis.
+These steps are for **Linux servers**. If you do not want to clone the full repo, you can deploy with only `docker-compose.yml` using prebuilt images.
 
 ### 1. Server Prerequisites
 
@@ -294,7 +326,39 @@ These steps are for **Linux servers**. This project uses `docker compose` to bui
    ./enable_swap.sh
    ```
 
-### 2. Clone and Configure
+### 2. Quick Deploy (No Full Repo)
+
+1. Create a directory and download `docker-compose.yml`:
+   ```bash
+   mkdir -p liu-site-cms && cd liu-site-cms
+   curl -fsSL https://github.com/liujunxiang0076/liu-site-CMS/blob/main/docker-compose.yml -o docker-compose.yml
+   ```
+
+2. Prepare backend config and auth file:
+   ```bash
+   mkdir -p backend
+   curl -fsSL <your-env-example-url> -o backend/.env
+   echo "{}" > backend/auth_data.json
+   ```
+   Edit `backend/.env` and fill in: `GITHUB_TOKEN`, `REPO_NAME`, `SECRET_KEY`.
+
+3. Set images and start:
+   Create a `.env` in the current directory for compose vars:
+   ```bash
+   DOCKER_IMAGE_FRONTEND=your-frontend-image
+   DOCKER_IMAGE_BACKEND=your-backend-image
+   FRONTEND_PORT=2912
+   BACKEND_PORT=8000
+   TZ=Asia/Shanghai
+   ```
+   Start:
+   ```bash
+   docker compose up -d
+   ```
+
+Note: quick deploy requires published images. If you do not have images, use the “Clone and Configure” flow to build locally.
+
+### 3. Clone and Configure
 
 1. Clone repository:
    ```bash
@@ -313,7 +377,7 @@ These steps are for **Linux servers**. This project uses `docker compose` to bui
    echo "{}" > backend/auth_data.json
    ```
 
-### 3. Start Docker (First Deploy)
+### 4. Start Docker (First Deploy)
 
 ```bash
 docker compose up -d --build
@@ -327,7 +391,7 @@ docker compose logs -f backend
 
 Access: frontend `http://SERVER_IP:2912`, backend API `http://SERVER_IP:8000/docs`.
 
-### 4. Update / Redeploy (Optional)
+### 5. Update / Redeploy (Optional)
 
 1. **Update code and rebuild** (keeps auth data):
    ```bash
