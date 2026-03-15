@@ -88,9 +88,84 @@ A lightweight, modern Content Management System designed for managing static blo
 - **默认密码**：`admin123`
 - 请在首次登录后通过设置页面及时修改密码。
 
-## 📦 部署
+## 📦 部署（服务器 Docker）
 
-生产环境 Docker 部署请参考 [README_DEPLOY.md](./README_DEPLOY.md)。
+以下步骤适用于 **Linux 服务器**（推荐 Ubuntu / Debian / CentOS）。本项目使用 `docker compose` 一键构建前后端与 Redis。
+
+### 1. 服务器环境准备
+
+1. 安装 Docker 与 Docker Compose 插件（示例）：
+   ```bash
+   # Ubuntu / Debian
+   sudo apt update
+   sudo apt install -y docker.io docker-compose-plugin
+   sudo systemctl enable --now docker
+   ```
+   ```bash
+   # CentOS / Rocky
+   sudo yum install -y docker
+   sudo systemctl enable --now docker
+   sudo yum install -y docker-compose-plugin
+   ```
+
+2. 放行端口（默认）：前端 `2912`、后端 `8000`。如需修改端口，编辑 `docker-compose.yml` 中的 `ports` 映射。
+
+3. 内存较小的服务器（1G/2G）建议开启 Swap：
+   ```bash
+   chmod +x enable_swap.sh
+   ./enable_swap.sh
+   ```
+
+### 2. 拉取代码并配置环境变量
+
+1. 拉取项目：
+   ```bash
+   git clone <你的仓库地址>
+   cd liu-site-CMS
+   ```
+
+2. 配置后端环境变量：
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+   编辑 `backend/.env`，重点填写：`GITHUB_TOKEN`（需要 `repo` 权限）、`REPO_NAME`（如 `username/your-blog`）、`SECRET_KEY`（务必修改）、`TG_IMG_API`（可选）。
+
+3. 生成认证文件（避免 Docker 把文件创建成目录）：
+   ```bash
+   echo "{}" > backend/auth_data.json
+   ```
+
+### 3. 启动 Docker（首次部署）
+
+```bash
+docker compose up -d --build
+```
+
+检查状态与日志：
+```bash
+docker compose ps
+docker compose logs -f backend
+```
+
+访问地址：前端 `http://服务器IP:2912`，后端 API `http://服务器IP:8000/docs`。
+
+### 4. 更新与重部署（可选）
+
+1. **更新代码并重建**（保留认证数据）：
+   ```bash
+   chmod +x server_update.sh
+   ./server_update.sh
+   ```
+   注意：该脚本包含 `git reset --hard origin/main`，会清理本地未提交改动。
+
+2. **彻底重置并重新部署**（清理容器、镜像、卷）：
+   ```bash
+   chmod +x clean_redeploy.sh
+   ./clean_redeploy.sh
+   ```
+   注意：会删除 Docker 卷与缓存，谨慎使用。
+
+如需更完整的排障指南，请查看 `README_DEPLOY.md`。
 
 ## ⚙️ 配置说明
 
@@ -191,9 +266,84 @@ A lightweight, modern Content Management System designed for managing static blo
 - **Default Password**: `admin123`
 - Please change your password immediately after the first login via the settings menu.
 
-## 📦 Deployment
+## 📦 Deployment (Docker on Server)
 
-For production deployment using Docker, please refer to [README_DEPLOY.md](./README_DEPLOY.md).
+These steps are for **Linux servers**. This project uses `docker compose` to build frontend, backend, and Redis.
+
+### 1. Server Prerequisites
+
+1. Install Docker and Docker Compose plugin (example):
+   ```bash
+   # Ubuntu / Debian
+   sudo apt update
+   sudo apt install -y docker.io docker-compose-plugin
+   sudo systemctl enable --now docker
+   ```
+   ```bash
+   # CentOS / Rocky
+   sudo yum install -y docker
+   sudo systemctl enable --now docker
+   sudo yum install -y docker-compose-plugin
+   ```
+
+2. Open ports (defaults): frontend `2912`, backend `8000`. To change ports, edit `ports` in `docker-compose.yml`.
+
+3. Low-memory servers should enable swap:
+   ```bash
+   chmod +x enable_swap.sh
+   ./enable_swap.sh
+   ```
+
+### 2. Clone and Configure
+
+1. Clone repository:
+   ```bash
+   git clone <your-repo-url>
+   cd liu-site-CMS
+   ```
+
+2. Configure backend env:
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+   Edit `backend/.env` and fill in: `GITHUB_TOKEN`, `REPO_NAME`, `SECRET_KEY`, `TG_IMG_API` (optional).
+
+3. Create auth file (prevents Docker from creating a directory):
+   ```bash
+   echo "{}" > backend/auth_data.json
+   ```
+
+### 3. Start Docker (First Deploy)
+
+```bash
+docker compose up -d --build
+```
+
+Check status and logs:
+```bash
+docker compose ps
+docker compose logs -f backend
+```
+
+Access: frontend `http://SERVER_IP:2912`, backend API `http://SERVER_IP:8000/docs`.
+
+### 4. Update / Redeploy (Optional)
+
+1. **Update code and rebuild** (keeps auth data):
+   ```bash
+   chmod +x server_update.sh
+   ./server_update.sh
+   ```
+   Note: this script runs `git reset --hard origin/main` and will discard local changes.
+
+2. **Hard reset** (removes containers, images, and volumes):
+   ```bash
+   chmod +x clean_redeploy.sh
+   ./clean_redeploy.sh
+   ```
+   Note: this removes Docker volumes and caches.
+
+For troubleshooting, see `README_DEPLOY.md`.
 
 ## ⚙️ Configuration
 
