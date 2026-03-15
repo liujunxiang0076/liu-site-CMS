@@ -2,10 +2,15 @@ version: '3.8'
 
 services:
   frontend:
-    build: ./frontend
+    image: ${DOCKER_IMAGE_FRONTEND:-liu-site-cms-frontend}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: cms-frontend
     ports:
-      - "2912:80"
+      - "${FRONTEND_PORT:-2912}:80"
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
     depends_on:
       - backend
     networks:
@@ -14,13 +19,16 @@ services:
 
   backend:
     image: ${DOCKER_IMAGE_BACKEND:-liu-site-cms-backend}
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: cms-backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - TZ=${TZ:-Asia/Shanghai}
     # 挂载 .env 文件，如果 backend 目录下有 .env 则使用，否则请手动创建
     env_file:
       - ./backend/.env
@@ -39,6 +47,16 @@ services:
   redis:
     image: redis:alpine
     container_name: cms-redis
+    # 可选：暴露到宿主机，便于调试
+    # ports:
+    #   - "${REDIS_PORT:-6379}:6379"
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - cms-network
     restart: always
