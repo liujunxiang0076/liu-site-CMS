@@ -78,7 +78,7 @@ def get_cache(key: str):
         logger.error(f"Redis get failed: {e}")
         return None
 
-def set_cache(key: str, value: str, ex: int = None):
+def set_cache(key: str, value: str, ex: int = None): # type: ignore
     if not redis_client: return
     try:
         redis_client.set(key, value, ex=ex)
@@ -90,7 +90,7 @@ def delete_cache(pattern: str):
     try:
         keys = redis_client.keys(pattern)
         if keys:
-            redis_client.delete(*keys)
+            redis_client.delete(*keys) # type: ignore
     except Exception as e:
         logger.error(f"Redis delete failed: {e}")
 
@@ -197,7 +197,7 @@ def get_articles(force_refresh: bool = False):
         if not force_refresh:
             cached_data = get_cache(CACHE_KEY_ARTICLES)
             if cached_data:
-                data = json.loads(cached_data)
+                data = json.loads(cached_data) # type: ignore
                 return success(data=data, total=len(data), extra={"cache": "HIT"})
 
         # 获取全量文件树
@@ -255,10 +255,10 @@ def get_article_detail(path: str, force_refresh: bool = False):
         if not force_refresh:
             cached_data = get_cache(cache_key)
             if cached_data:
-                return success(data=json.loads(cached_data), extra={"cache": "HIT"})
+                return success(data=json.loads(cached_data), extra={"cache": "HIT"}) # type: ignore
 
         content_file = client.repo.get_contents(path)
-        raw_content = base64.b64decode(content_file.content).decode('utf-8')
+        raw_content = base64.b64decode(content_file.content).decode('utf-8') # type: ignore
         
         result = {
             "path": path,
@@ -270,7 +270,7 @@ def get_article_detail(path: str, force_refresh: bool = False):
         set_cache(cache_key, json.dumps(result), ex=CACHE_TTL_DETAIL)
 
         # 返回详情，并带上关键的 SHA
-        return success(data=result, sha=content_file.sha, extra={"cache": "MISS"})
+        return success(data=result, sha=content_file.sha, extra={"cache": "MISS"}) # type: ignore
     except Exception as e:
         logger.error(f"读取文件内容失败: {path} - {str(e)}", exc_info=True)
         return fail(msg=f"读取文件内容失败: {path}", code=Code.NOT_FOUND)
@@ -299,7 +299,7 @@ def save_to_github(item: SaveArticleRequest):
         if not item.sha or item.sha in ["", "new"]:
             logger.info(f"正在新建文件: {item.path}")
             try:
-                res = client.repo.create_file(**params)
+                res = client.repo.create_file(**params) # type: ignore
                 action = "创建"
             except Exception as create_e:
                 # 容错处理：如果报错 "sha wasn't supplied" (422)，说明文件已存在，尝试获取 SHA 并转为更新
@@ -307,8 +307,8 @@ def save_to_github(item: SaveArticleRequest):
                     logger.warning(f"文件已存在但未提供 SHA，尝试自动修复: {item.path}")
                     try:
                         existing_file = client.repo.get_contents(item.path)
-                        params["sha"] = existing_file.sha
-                        res = client.repo.update_file(**params)
+                        params["sha"] = existing_file.sha # type: ignore
+                        res = client.repo.update_file(**params) # type: ignore
                         action = "更新 (自动修复)"
                     except Exception as inner_e:
                         # 如果修复过程中再次失败（如获取失败），抛出原始错误
@@ -319,7 +319,7 @@ def save_to_github(item: SaveArticleRequest):
         else:
             logger.info(f"正在更新文件: {item.path} (SHA: {item.sha})")
             params["sha"] = item.sha
-            res = client.repo.update_file(**params)
+            res = client.repo.update_file(**params) # type: ignore
             action = "更新"
             
         # 核心：必须返回新的 SHA，否则前端无法连续保存
@@ -344,7 +344,7 @@ def save_to_github(item: SaveArticleRequest):
 async def upload_image(file: UploadFile = File(...)):
     try:
         # 1. 验证文件类型
-        if not file.content_type.startswith("image/"):
+        if not file.content_type.startswith("image/"): # type: ignore
             return fail(msg="仅支持上传图片文件", code=Code.PARAM_ERROR)
         
         logger.info(f"开始上传图片: {file.filename}")
@@ -390,7 +390,7 @@ def rename_article(item: RenameArticleRequest):
         content = item.content
         if not content:
             old_file = client.repo.get_contents(item.old_path)
-            content = base64.b64decode(old_file.content).decode('utf-8')
+            content = base64.b64decode(old_file.content).decode('utf-8') # type: ignore
 
         # 2. 在新路径创建文件
         create_res = client.repo.create_file(
