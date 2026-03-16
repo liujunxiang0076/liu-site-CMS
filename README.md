@@ -201,12 +201,72 @@ docker compose logs -f backend
 
 ## 🌐 前后端分离部署（Vercel / Cloudflare Pages + 服务器后端）
 
-适用于前端部署到静态托管平台、后端部署到服务器的场景。
+适用于前端部署到静态托管平台、后端单独部署在服务器或 1Panel 的场景。
 
-1. **后端**：确保后端 API 可公网访问，例如 `https://api.example.com/api`。
-2. **后端 CORS**：在 `backend/.env` 中设置 `ALLOWED_ORIGINS` 为你的前端域名，例如 `https://cms.example.com`。
-3. **前端环境变量**：在前端构建环境中设置 `VITE_API_BASE` 为后端 API 基础地址，例如 `https://api.example.com/api`。
-4. **重新构建前端**：在 Vercel/Cloudflare Pages 触发重新构建，使环境变量生效。
+1. 后端单独部署并保证 API 可公网访问，例如 `https://api.example.com/api`。
+2. 在 `backend/.env` 中设置 `ALLOWED_ORIGINS` 为你的前端域名，例如 `https://cms.example.com`。
+3. 前端构建环境中设置 `VITE_API_BASE` 为后端 API 基础地址，例如 `https://api.example.com/api`。
+4. 触发前端重新构建，使环境变量生效。
+
+### 后端单独部署（1Panel 示例）
+
+1. 在服务器上构建后端镜像（示例路径）：
+   ```bash
+   cd /opt/1panel/docker/compose/liu-site-CMS/backend
+   docker build -t liu-backend-custom .
+   ```
+
+2. 新建编排目录并准备配置：
+   ```bash
+   mkdir -p /opt/1panel/docker/compose/my-backend/backend
+   cd /opt/1panel/docker/compose/my-backend
+   # 准备后端环境变量与认证文件
+   cp /opt/1panel/docker/compose/liu-site-CMS/backend/.env.example backend/.env
+   echo "{}" > backend/auth_data.json
+   ```
+
+3. 创建 `docker-compose.yml`（仅后端与 Redis）：
+   ```yaml
+   services:
+     backend:
+       image: liu-backend-custom:latest
+       container_name: my-cms-backend
+       ports:
+         - "8000:8000"
+       environment:
+         - REDIS_HOST=redis
+         - REDIS_PORT=6379
+         - TZ=Asia/Shanghai
+       env_file:
+         - ./backend/.env
+       volumes:
+         - ./backend/auth_data.json:/app/auth_data.json:rw
+       depends_on:
+         - redis
+       restart: always
+       networks:
+         - cms-net
+
+     redis:
+       image: redis:alpine
+       container_name: my-cms-redis
+       restart: always
+       networks:
+         - cms-net
+       volumes:
+         - redis-data:/data
+
+   networks:
+     cms-net:
+       driver: bridge
+
+   volumes:
+     redis-data:
+   ```
+
+4. 在 1Panel 中进入“容器” -> “编排”，创建编排并选择目录 `/opt/1panel/docker/compose/my-backend`。
+
+前端可以部署到 Vercel、Cloudflare Pages，或把 `dist` 作为静态网站托管，配置 `VITE_API_BASE` 指向后端即可。
 
 ## ⚙️ 配置说明
 
@@ -428,12 +488,69 @@ For troubleshooting, see `README_DEPLOY.md`.
 
 ## 🌐 Split Deployment (Vercel / Cloudflare Pages + Server Backend)
 
-Use this when the frontend is hosted on a static platform and the backend runs on your server.
+Use this when the frontend is hosted on a static platform and the backend runs on your server or 1Panel.
 
-1. **Backend**: Make sure your API is publicly reachable, for example `https://api.example.com/api`.
-2. **Backend CORS**: Set `ALLOWED_ORIGINS` in `backend/.env` to your frontend domain, for example `https://cms.example.com`.
-3. **Frontend env**: Set `VITE_API_BASE` in your frontend build environment, for example `https://api.example.com/api`.
-4. **Rebuild frontend**: Trigger a rebuild on Vercel/Cloudflare Pages to apply the env vars.
+1. Ensure the backend API is publicly reachable, for example `https://api.example.com/api`.
+2. Set `ALLOWED_ORIGINS` in `backend/.env` to your frontend domain, for example `https://cms.example.com`.
+3. Set `VITE_API_BASE` in the frontend build environment, for example `https://api.example.com/api`.
+4. Trigger a rebuild on Vercel or Cloudflare Pages.
+
+### Backend Only on 1Panel (Example)
+
+1. Build the backend image:
+   ```bash
+   cd /opt/1panel/docker/compose/liu-site-CMS/backend
+   docker build -t liu-backend-custom .
+   ```
+
+2. Create a compose folder and config:
+   ```bash
+   mkdir -p /opt/1panel/docker/compose/my-backend/backend
+   cd /opt/1panel/docker/compose/my-backend
+   cp /opt/1panel/docker/compose/liu-site-CMS/backend/.env.example backend/.env
+   echo "{}" > backend/auth_data.json
+   ```
+
+3. Create `docker-compose.yml`:
+   ```yaml
+   services:
+     backend:
+       image: liu-backend-custom:latest
+       container_name: my-cms-backend
+       ports:
+         - "8000:8000"
+       environment:
+         - REDIS_HOST=redis
+         - REDIS_PORT=6379
+         - TZ=Asia/Shanghai
+       env_file:
+         - ./backend/.env
+       volumes:
+         - ./backend/auth_data.json:/app/auth_data.json:rw
+       depends_on:
+         - redis
+       restart: always
+       networks:
+         - cms-net
+
+     redis:
+       image: redis:alpine
+       container_name: my-cms-redis
+       restart: always
+       networks:
+         - cms-net
+       volumes:
+         - redis-data:/data
+
+   networks:
+     cms-net:
+       driver: bridge
+
+   volumes:
+     redis-data:
+   ```
+
+4. In 1Panel, go to Containers, Compose, and create a new compose using `/opt/1panel/docker/compose/my-backend`.
 
 ## ⚙️ Configuration
 
