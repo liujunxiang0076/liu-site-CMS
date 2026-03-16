@@ -44,6 +44,7 @@
 
         <MdEditor v-model="currentArticle.content" editor-id="my-editor" class="pro-editor"
           placeholder="开始你的 Typora 式体验..." :no-front-matter="true" 
+          :toolbars="allToolbar"
           @onSave="handleSave" @onUploadImg="handleUploadImg" />
       </div>
 
@@ -86,7 +87,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Sidebar from '@/components/Sidebar.vue'
-import { MdEditor } from 'md-editor-v3';
+import { MdEditor, allToolbar } from 'md-editor-v3';
 import 'md-editor-v3/lib/style.css';
 import { articleApi } from '@/api/article'
 import { ApiCache } from '@/utils/apiCache'
