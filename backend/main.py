@@ -26,6 +26,11 @@ from datetime import timedelta
 # 1. 加载配置
 load_dotenv()
 
+# 应用运行配置
+APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
+APP_PORT = int(os.getenv("APP_PORT", 8000))
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+
 # 初始化 Auth 文件
 init_auth_file()
 
@@ -122,6 +127,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 统一输出启动信息
+@app.on_event("startup")
+async def _log_startup_info():
+    if PUBLIC_BASE_URL:
+        base_url = PUBLIC_BASE_URL
+    else:
+        base_url = f"http://{APP_HOST}:{APP_PORT}"
+
+    logger.info("startup.status=ok")
+    logger.info("startup.base_url=%s", base_url)
+    logger.info("startup.api_base=%s", f"{base_url}/api")
+    logger.info("startup.docs=%s", f"{base_url}/docs")
+    if APP_HOST == "0.0.0.0" and not PUBLIC_BASE_URL:
+        logger.info("startup.note=use-server-ip Replace 0.0.0.0 with your public IP or domain")
 
 # --- Auth 接口 ---
 
@@ -401,4 +421,4 @@ def rename_article(item: RenameArticleRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=APP_HOST, port=APP_PORT)
