@@ -199,6 +199,15 @@ docker compose logs -f backend
 
 如需更完整的排障指南，请查看 `README_DEPLOY.md`。
 
+## 🌐 前后端分离部署（Vercel / Cloudflare Pages + 服务器后端）
+
+适用于前端部署到静态托管平台、后端部署到服务器的场景。
+
+1. **后端**：确保后端 API 可公网访问，例如 `https://api.example.com/api`。
+2. **后端 CORS**：在 `backend/.env` 中设置 `ALLOWED_ORIGINS` 为你的前端域名，例如 `https://cms.example.com`。
+3. **前端环境变量**：在前端构建环境中设置 `VITE_API_BASE` 为后端 API 基础地址，例如 `https://api.example.com/api`。
+4. **重新构建前端**：在 Vercel/Cloudflare Pages 触发重新构建，使环境变量生效。
+
 ## ⚙️ 配置说明
 
 系统通过环境变量配置，关键变量位于 `backend/.env`：
@@ -211,6 +220,14 @@ docker compose logs -f backend
 | `SECRET_KEY` | JWT 令牌密钥，请务必修改！ |
 | `REDIS_HOST` | Redis 服务地址（默认：localhost）。 |
 | `REDIS_PORT` | Redis 端口（默认：6379）。 |
+| `ALLOWED_ORIGINS` | 允许跨域的前端域名列表（逗号分隔）。 |
+
+前端构建环境变量位于 `frontend/.env`（构建时生效）：
+
+| 变量 | 说明 |
+|------|------|
+| `VITE_API_BASE` | 后端 API 基础地址，默认 `/api`。 |
+| `VITE_STORAGE_KEY` | 本地加密 Key（可选）。 |
 
 ## 📄 许可证
 
@@ -409,6 +426,15 @@ Access: frontend `http://SERVER_IP:2912`, backend API `http://SERVER_IP:8000/doc
 
 For troubleshooting, see `README_DEPLOY.md`.
 
+## 🌐 Split Deployment (Vercel / Cloudflare Pages + Server Backend)
+
+Use this when the frontend is hosted on a static platform and the backend runs on your server.
+
+1. **Backend**: Make sure your API is publicly reachable, for example `https://api.example.com/api`.
+2. **Backend CORS**: Set `ALLOWED_ORIGINS` in `backend/.env` to your frontend domain, for example `https://cms.example.com`.
+3. **Frontend env**: Set `VITE_API_BASE` in your frontend build environment, for example `https://api.example.com/api`.
+4. **Rebuild frontend**: Trigger a rebuild on Vercel/Cloudflare Pages to apply the env vars.
+
 ## ⚙️ Configuration
 
 The system relies on environment variables for configuration. Key variables in `backend/.env`:
@@ -421,6 +447,14 @@ The system relies on environment variables for configuration. Key variables in `
 | `SECRET_KEY` | Secret key for JWT token generation. Change this! |
 | `REDIS_HOST` | Redis server host (default: localhost). |
 | `REDIS_PORT` | Redis server port (default: 6379). |
+| `ALLOWED_ORIGINS` | Allowed CORS origins (comma-separated). |
+
+Frontend build-time env variables in `frontend/.env`:
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_BASE` | Backend API base URL, default `/api`. |
+| `VITE_STORAGE_KEY` | Optional local encryption key. |
 
 ## 📄 License
 

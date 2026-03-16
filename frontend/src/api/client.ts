@@ -1,8 +1,10 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+const apiBase = import.meta.env.VITE_API_BASE || '/api'
+
 const apiClient = axios.create({
-  baseURL: '/api', // 所有的请求都会加上 /api 前缀
+  baseURL: apiBase, // 默认 /api，可通过 VITE_API_BASE 指向独立后端
   timeout: 10000,
 })
 
