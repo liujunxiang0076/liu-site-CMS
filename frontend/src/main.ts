@@ -6,6 +6,14 @@ import App from './App.vue'
 import router from './router'
 import './style/main.scss'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+import { config } from 'md-editor-v3'
+
+// Disable md-editor-v3 link shortener so long URLs aren't collapsed to "..."
+config({
+  codeMirrorExtensions(extensions) {
+    return extensions.filter((ext) => ext.type !== 'linkShortener')
+  }
+})
 
 const app = createApp(App)
 app.use(ElementPlus)
