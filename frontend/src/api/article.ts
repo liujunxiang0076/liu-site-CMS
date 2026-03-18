@@ -16,15 +16,21 @@ export const articleApi = {
   // 获取文章列表（带缓存策略）
   getList: async (forceRefresh = false) => {
     const CACHE_KEY = 'cms_article_list_v2';
-    
+    const LIST_CACHE_SOFT_TTL = 2 * 60 * 1000; // 2 minutes: skip version check
+
     if (!forceRefresh) {
       const cached = await ApiCache.get<any[]>(CACHE_KEY);
       if (cached) {
+        const age = Date.now() - cached.timestamp;
+        if (age < LIST_CACHE_SOFT_TTL) {
+          console.log('Frontend Cache Hit: List (soft ttl)');
+          return { code: 200, msg: 'success', data: cached.data, total: cached.data.length, fromCache: true };
+        }
         try {
           // 双重校验：检查后端版本
           const vRes = await apiClient.get<any, ApiResponse<{ version: string }>>('/version');
           if (vRes.data.version === cached.version) {
-            console.log('Frontend Cache Hit: List');
+             console.log('Frontend Cache Hit: List');
             return { code: 200, msg: 'success', data: cached.data, total: cached.data.length, fromCache: true };
           }
         } catch (e) {

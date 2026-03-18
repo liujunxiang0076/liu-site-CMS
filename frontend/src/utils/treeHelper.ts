@@ -8,6 +8,10 @@ export const findNodeByPath = (nodes: any[], path: string): any | any[] | null =
   if (path === 'src') {
     return nodes;
   }
+  if (path === 'src/posts') {
+    const hasGroup = nodes.some((n: any) => n.group);
+    if (!hasGroup) return nodes;
+  }
 
   for (const node of nodes) {
     if (node.path === path) {

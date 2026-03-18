@@ -42,26 +42,37 @@
           :props="{ label: 'name', children: 'children' }" 
           highlight-current 
           node-key="path"
-          :indent="16" 
+          :expand-on-click-node="true"
+          :default-expanded-keys="defaultExpandedKeys"
+          :indent="12" 
           @node-click="handleNodeClick" 
           @node-contextmenu="handleRightClick"
         >
           <template v-slot="{ node, data }">
             <div class="tree-node-wrapper" :class="{ 'is-virtual': data.isVirtual, 'is-group': data.group }">
               <template v-if="!data.isEditing">
-                <span class="icon">{{ data.type === 'folder' ? '📁' : '📄' }}</span>
-                <span class="label" :class="{ 'is-draft': data.isDraft }">{{ node.label }}</span>
-                <span v-if="data.isModified" class="unsaved-dot"></span>
-                <el-tag v-if="data.isVirtual" size="small" type="info" effect="plain" class="local-tag">本地</el-tag>
-                <el-tag
-                  v-else-if="data.type === 'file'"
-                  size="small"
-                  :type="data.isDraft ? 'warning' : 'success'"
-                  effect="plain"
-                  class="status-tag"
-                >
-                  {{ data.isDraft ? '草稿' : '已发布' }}
-                </el-tag>
+                <span class="icon" v-if="!data.group">
+                  <template v-if="data.type === 'folder'">
+                    <span class="folder-icon">📁</span>
+                    <span class="caret-icon">{{ node.expanded ? '▾' : '▸' }}</span>
+                  </template>
+                  <template v-else>
+                    📄
+                  </template>
+                </span>
+                <span
+                  v-if="data.type === 'file'"
+                  class="status-dot"
+                  :class="{ 'is-draft': data.isDraft, 'is-post': !data.isDraft }"
+                  :title="data.isDraft ? '草稿' : '已发布'"
+                ></span>
+                <span class="label" :class="{ 'is-draft': data.isDraft }">
+                  {{ data.type === 'file' ? (node.label || '').replace(/\.md$/i, '') : node.label }}
+                </span>
+                <span class="node-tail">
+                  <span v-if="data.isModified" class="unsaved-dot"></span>
+                  <el-tag v-if="data.isVirtual" size="small" type="info" effect="plain" class="local-tag">本地</el-tag>
+                </span>
               </template>
 
               <template v-else>
@@ -93,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { 
   DocumentAdd, FolderAdd, Refresh, Edit, Delete, 
   ArrowLeft, ArrowRight, Setting, SwitchButton // 新增图标
@@ -103,11 +114,17 @@ import {
 const isCollapsed = ref(false)
 
 // 定义 Props
-defineProps<{
+const props = defineProps<{
   treeData: any[]
   loading: boolean
   isFromCache?: boolean
 }>()
+
+const defaultExpandedKeys = computed(() => {
+  return (props.treeData || [])
+    .filter((n: any) => n.group && n.path)
+    .map((n: any) => n.path)
+})
 
 // 定义事件
 const emit = defineEmits(['select', 'create-article', 'create-folder', 'refresh', 'rename', 'delete', 'clear-selection', 'settings', 'logout'])
@@ -366,6 +383,10 @@ const handleNameConfirm = (data: any) => {
     :deep(.el-tree) {
       background: transparent;
 
+      .el-tree-node__expand-icon {
+        display: none;
+      }
+
       .el-tree-node__content {
         height: 34px;
         padding: 0 8px;
@@ -392,12 +413,27 @@ const handleNameConfirm = (data: any) => {
       font-size: 14px;
 
       .icon {
-        margin-right: 8px;
+        margin-right: 6px;
         font-size: 14px;
+        width: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        .caret-icon {
+          display: none;
+          font-size: 12px;
+          color: #9aa3b2;
+        }
+
+        .folder-icon {
+          display: inline-block;
+        }
       }
 
       .label {
         flex: 1;
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -413,8 +449,35 @@ const handleNameConfirm = (data: any) => {
         height: 6px;
         background: #f5a623;
         border-radius: 50%;
-        margin-left: 8px;
         box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.2);
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin: 0 6px 0 0;
+        opacity: 0.7;
+        flex-shrink: 0;
+        animation: pulseDot 2.2s ease-in-out infinite;
+      }
+
+      .status-dot.is-draft {
+        background: #e6a23c;
+        box-shadow: 0 0 0 3px rgba(230, 162, 60, 0.15);
+      }
+
+      .status-dot.is-post {
+        background: #67c23a;
+        box-shadow: 0 0 0 3px rgba(103, 194, 58, 0.15);
+      }
+
+      .node-tail {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+        flex-shrink: 0;
       }
 
       .inline-input {
@@ -439,16 +502,6 @@ const handleNameConfirm = (data: any) => {
       }
 
       .local-tag {
-        margin-left: 8px;
-        height: 16px;
-        line-height: 14px;
-        padding: 0 4px;
-        font-size: 10px;
-        transform: scale(0.8);
-      }
-
-      .status-tag {
-        margin-left: 8px;
         height: 16px;
         line-height: 14px;
         padding: 0 4px;
@@ -457,10 +510,25 @@ const handleNameConfirm = (data: any) => {
       }
 
       &.is-group {
+        .icon,
+        .status-dot,
+        .node-tail {
+          display: none;
+        }
         .label {
           font-weight: 700;
           color: #4a7ee5;
+          letter-spacing: 1px;
         }
+      }
+    }
+
+    .el-tree-node__content:hover .tree-node-wrapper .icon {
+      .folder-icon {
+        display: none;
+      }
+      .caret-icon {
+        display: inline-block;
       }
     }
   }
@@ -498,6 +566,17 @@ const handleNameConfirm = (data: any) => {
         }
       }
     }
+  }
+}
+
+@keyframes pulseDot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.9;
   }
 }
 </style>

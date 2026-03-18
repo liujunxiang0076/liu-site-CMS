@@ -324,6 +324,10 @@ const checkDuplicateName = (parentPath: string, fileName: string): boolean => {
     }
     // 特殊情况：如果是根目录 src，返回根列表
     if (parentPath === 'src') return nodes
+    if (parentPath === 'src/posts') {
+      const hasGroup = nodes.some((n: any) => n.group)
+      if (!hasGroup) return nodes
+    }
     return null
   }
 
@@ -348,8 +352,30 @@ const fetchList = async (forceRefresh: any = false) => {
     try {
       // 1. 从 IndexedDB 获取所有本地草稿
       const localArticles = await storage.getAllLocalArticles();
+      const hasLocalDrafts = localArticles.length > 0;
+
+      // 2. 处理分组结构：如果没有草稿（远程+本地），隐藏“已发布”分组，直接展示主目录
+      const postsGroupIndex = newTreeData.findIndex((n: any) => n.group === 'posts' || n.path === 'src/posts');
+      const draftsGroupIndex = newTreeData.findIndex((n: any) => n.group === 'drafts' || n.path === 'src/drafts');
+      const draftsGroup = draftsGroupIndex >= 0 ? newTreeData[draftsGroupIndex] : null;
+      const hasRemoteDrafts = !!(draftsGroup && Array.isArray(draftsGroup.children) && draftsGroup.children.length > 0);
+
+      if (!hasRemoteDrafts && !hasLocalDrafts && postsGroupIndex >= 0) {
+        newTreeData = newTreeData[postsGroupIndex]?.children || [];
+      } else {
+        // 如果有本地草稿但没有草稿分组，补一个草稿分组
+        if (hasLocalDrafts && draftsGroupIndex < 0) {
+          newTreeData.push({
+            name: '草稿',
+            path: 'src/drafts',
+            type: 'folder',
+            children: [],
+            group: 'drafts'
+          });
+        }
+      }
       
-      // 2. 遍历本地草稿，将其作为虚拟节点插入到新列表中
+      // 3. 遍历本地草稿，将其作为虚拟节点插入到新列表中
       localArticles.forEach(draft => {
         // 既然是本地草稿，说明还没同步到后端，列表中肯定没有（除非重名冲突，insertNodeToTree 暂时没处理去重，但问题不大）
         // 从 path 中提取文件名
@@ -369,7 +395,7 @@ const fetchList = async (forceRefresh: any = false) => {
         // 提取父路径
         const parentPath = draft.path.substring(0, draft.path.lastIndexOf('/'));
         
-        // 3. 插入到树中
+        // 4. 插入到树中
         const success = insertNodeToTree(newTreeData, parentPath, virtualNode);
         
         // 兜底：如果没找到父目录（比如根目录），直接放最前面
