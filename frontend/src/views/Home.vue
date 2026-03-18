@@ -94,6 +94,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Sidebar from '@/components/Sidebar.vue'
 import { MdEditor, allToolbar } from 'md-editor-v3';
@@ -109,6 +110,7 @@ import { hasSubstantialDifference, logConsistencyCheck } from '@/utils/consisten
 
 
 const sidebarRef = ref()
+const router = useRouter()
 
 // --- 状态定义 ---
 const treeData = ref<any[]>([])
@@ -148,7 +150,7 @@ const handleLogout = async () => {
     await ApiCache.clear()
     
     // 跳转登录页
-    window.location.href = '/login'
+    router.replace('/login')
   } catch (e) {
     // 用户取消，不做任何操作
   }
@@ -1052,7 +1054,7 @@ const handleChangePassword = async () => {
     
     // 强制跳转登录页
     setTimeout(() => {
-        window.location.href = '/login'
+        router.replace('/login')
     }, 1000)
 
   } catch (err: any) {

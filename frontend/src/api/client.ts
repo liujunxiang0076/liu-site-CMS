@@ -8,6 +8,20 @@ const apiClient = axios.create({
   timeout: 10000,
 })
 
+const redirectToLogin = () => {
+  if (window.location.pathname === '/login') return
+
+  import('@/router')
+    .then(({ default: router }) => {
+      if (router.currentRoute.value.path !== '/login') {
+        router.replace('/login')
+      }
+    })
+    .catch(() => {
+      window.location.assign('/login')
+    })
+}
+
 // 请求拦截器：添加 Token
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
@@ -45,7 +59,9 @@ apiClient.interceptors.response.use(
     switch (res.code) {
       case 401:
         ElMessage.warning('登录已过期，请重新登录');
-        // router.push('/login'); 
+        localStorage.removeItem('token');
+        localStorage.removeItem('token_expire');
+        redirectToLogin();
         break;
       case 404:
         ElMessage.error('找不到相关资源');
@@ -62,7 +78,8 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       ElMessage.warning('登录已过期，请重新登录');
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      localStorage.removeItem('token_expire');
+      redirectToLogin();
       return Promise.reject(error);
     }
     
