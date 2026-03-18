@@ -10,6 +10,7 @@ class Code(IntEnum):
     UNAUTHORIZED = 401       # 未授权/Token失效
     FORBIDDEN = 403          # 权限不足
     NOT_FOUND = 404          # 资源不存在
+    CONFLICT = 409           # 资源冲突
     PARAM_ERROR = 422        # 请求参数校验失败
     INTERNAL_ERROR = 500     # 服务器内部错误
     GITHUB_ERROR = 502       # GitHub API 调用失败

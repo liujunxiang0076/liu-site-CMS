@@ -9,8 +9,14 @@ logger = logging.getLogger("CMS-GitHub")
 
 class GitHubClient:
     def __init__(self):
-        token = os.getenv("GITHUB_TOKEN")
-        repo_name = os.getenv("REPO_NAME")
+        token = (os.getenv("GITHUB_TOKEN") or "").strip()
+        repo_name = (os.getenv("REPO_NAME") or "").strip()
+        timeout = int(os.getenv("GITHUB_TIMEOUT", "8"))
+
+        if not token:
+            raise ValueError("GITHUB_TOKEN 未配置或为空")
+        if not repo_name:
+            raise ValueError("REPO_NAME 未配置或为空")
         
         # 增加 SSL 验证配置，解决部分网络环境下的 SSL 报错
         verify_ssl = os.getenv("GITHUB_VERIFY_SSL", "true").lower() == "true"
@@ -25,13 +31,16 @@ class GitHubClient:
         
         # 初始化 Github 客户端
         # verify 参数用于控制 SSL 证书验证
-        self.g = Github(auth=None, login_or_token=token, verify=verify_ssl)
+        self.g = Github(auth=None, login_or_token=token, verify=verify_ssl, timeout=timeout)
         
         try:
             self.repo = self.g.get_repo(repo_name)
             logger.info(f"Successfully connected to repo: {repo_name}")
         except Exception as e:
             logger.error(f"Failed to connect to GitHub repo: {e}")
+            status = getattr(e, "status", None)
+            if status == 401 or "Bad credentials" in str(e):
+                raise ValueError("GitHub 认证失败：请检查 GITHUB_TOKEN 是否有效且有访问权限") from e
             raise e
 
     def get_latest_commit_sha(self, branch: str = "main") -> str:

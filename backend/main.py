@@ -4,7 +4,8 @@ import base64
 import logging
 import json
 import redis
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -50,7 +51,9 @@ logger = logging.getLogger("CMS-Backend")
 app = FastAPI()
 
 # 3. 初始化工具类
-client = GitHubClient()
+client: Optional[GitHubClient] = None
+github_init_error: Optional[str] = None
+
 uploader = TelegramUploader()
 
 # Redis 初始化
@@ -69,6 +72,48 @@ CACHE_TTL_ARTICLES = 3600  # 1 hour
 CACHE_TTL_DETAIL = 86400   # 24 hours
 CACHE_KEY_VERSION = "cms:version"
 CACHE_KEY_ARTICLES = "cms:articles"
+
+# 文章路径前缀
+DRAFT_PREFIX = "src/drafts/"
+POST_PREFIX = "src/posts/"
+
+def _is_draft_path(path: str) -> bool:
+    return isinstance(path, str) and path.startswith(DRAFT_PREFIX) and path.endswith(".md")
+
+def _is_post_path(path: str) -> bool:
+    return isinstance(path, str) and path.startswith(POST_PREFIX) and path.endswith(".md")
+
+def _swap_prefix(path: str, from_prefix: str, to_prefix: str) -> Optional[str]:
+    if not isinstance(path, str) or not path.startswith(from_prefix):
+        return None
+    return f"{to_prefix}{path[len(from_prefix):]}"
+
+def _get_existing_file(path: str):
+    try:
+        return client.repo.get_contents(path)
+    except Exception as e:
+        if getattr(e, "status", None) == 404:
+            return None
+        raise
+
+def _validate_publish_paths(old_path: str, new_path: str, from_prefix: str, to_prefix: str):
+    if not old_path or not new_path:
+        return fail(msg="路径不能为空", code=Code.PARAM_ERROR)
+    if not _is_draft_path(old_path) and not _is_post_path(old_path):
+        return fail(msg="旧路径必须在 src/drafts 或 src/posts 下", code=Code.PARAM_ERROR)
+    if not _is_draft_path(new_path) and not _is_post_path(new_path):
+        return fail(msg="新路径必须在 src/drafts 或 src/posts 下", code=Code.PARAM_ERROR)
+    if not old_path.startswith(from_prefix):
+        return fail(msg="旧路径前缀不正确", code=Code.PARAM_ERROR)
+    if not new_path.startswith(to_prefix):
+        return fail(msg="新路径前缀不正确", code=Code.PARAM_ERROR)
+
+    expected_new = _swap_prefix(old_path, from_prefix, to_prefix)
+    if expected_new != new_path:
+        return fail(msg="路径不匹配，需保留子路径结构", code=Code.PARAM_ERROR)
+    if old_path == new_path:
+        return fail(msg="新旧路径不能相同", code=Code.PARAM_ERROR)
+    return None
 
 def get_cache(key: str):
     if not redis_client: return None
@@ -112,6 +157,7 @@ class RenameArticleRequest(BaseModel):
     new_path: str
     sha: str
     content: Optional[str] = None # 如果重命名时内容有变化可以一起传
+    overwrite: Optional[bool] = False # 允许覆盖目标文件
 
 # GitHub 分支配置
 GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
@@ -128,6 +174,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 统一异常处理，避免错误无上下文
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=fail(msg=str(exc.detail), code=exc.status_code)
+        )
+
+    logger.error(
+        "unhandled.error path=%s method=%s err=%s",
+        request.url.path,
+        request.method,
+        exc,
+        exc_info=True
+    )
+    return JSONResponse(
+        status_code=500,
+        content=fail(msg="服务异常，请查看后端日志", code=Code.INTERNAL_ERROR)
+    )
+
+def _require_github_client():
+    global client, github_init_error
+    if client is None:
+        try:
+            client = GitHubClient()
+            github_init_error = None
+        except Exception as e:
+            github_init_error = str(e)
+            msg = f"GitHub 未初始化: {github_init_error or '未知错误'}"
+            logger.error(msg, exc_info=True)
+            return fail(msg=msg, code=Code.GITHUB_ERROR)
+    return None
+
 # 统一输出启动信息
 @app.on_event("startup")
 async def _log_startup_info():
@@ -142,6 +222,8 @@ async def _log_startup_info():
     logger.info("startup.docs=%s", f"{base_url}/docs")
     if APP_HOST == "0.0.0.0" and not PUBLIC_BASE_URL:
         logger.info("startup.note=use-server-ip Replace 0.0.0.0 with your public IP or domain")
+    if github_init_error:
+        logger.error("startup.github_init_error=%s", github_init_error)
 
 # --- Auth 接口 ---
 
@@ -180,6 +262,8 @@ async def change_password(request: PasswordChangeRequest):
 def get_version():
     """获取当前数据版本号 (Latest Commit SHA)"""
     try:
+        err = _require_github_client()
+        if err: return err
         version = get_cache(CACHE_KEY_VERSION)
         if not version:
             version = client.get_latest_commit_sha()
@@ -193,6 +277,8 @@ def get_version():
 @app.get("/api/articles")
 def get_articles(force_refresh: bool = False):
     try:
+        err = _require_github_client()
+        if err: return err
         # 缓存检查
         if not force_refresh:
             cached_data = get_cache(CACHE_KEY_ARTICLES)
@@ -230,13 +316,19 @@ def get_articles(force_refresh: bool = False):
                 if current_path in folder_map:
                     folder_map[current_path]["children"].append(file_node)
 
-        # 整理返回列表
+        # 整理返回列表（保留 posts/drafts 分组，避免同名目录冲突）
         final_list = []
         src_node = next((n for n in root["children"] if n["name"] == "src"), None)
         if src_node:
             for sub in src_node["children"]:
-                if sub["name"] in ["posts", "drafts"]:
-                    final_list.extend(sub["children"])
+                if sub["name"] == "posts":
+                    sub["group"] = "posts"
+                    sub["name"] = "已发布"
+                    final_list.append(sub)
+                elif sub["name"] == "drafts":
+                    sub["group"] = "drafts"
+                    sub["name"] = "草稿"
+                    final_list.append(sub)
         
         # 写入缓存
         set_cache(CACHE_KEY_ARTICLES, json.dumps(final_list), ex=CACHE_TTL_ARTICLES)
@@ -250,6 +342,8 @@ def get_articles(force_refresh: bool = False):
 @app.get("/api/article/detail", dependencies=[Depends(get_current_user)])
 def get_article_detail(path: str, force_refresh: bool = False):
     try:
+        err = _require_github_client()
+        if err: return err
         cache_key = f"cms:article:{path}"
         
         if not force_refresh:
@@ -278,6 +372,8 @@ def get_article_detail(path: str, force_refresh: bool = False):
 @app.post("/api/article/save", dependencies=[Depends(get_current_user)])
 def save_to_github(item: SaveArticleRequest):
     try:
+        err = _require_github_client()
+        if err: return err
         # 1. 基础验证
         if not item.path:
             return fail(msg="文件路径不能为空", code=Code.PARAM_ERROR)
@@ -365,6 +461,8 @@ async def upload_image(file: UploadFile = File(...)):
 @app.post("/api/article/delete", dependencies=[Depends(get_current_user)])
 def delete_article(item: DeleteArticleRequest):
     try:
+        err = _require_github_client()
+        if err: return err
         default_msg = f"CMS Delete: {os.path.basename(item.path)}"
         commit_msg = item.message.strip() if item.message and item.message.strip() else default_msg
         client.repo.delete_file(
@@ -382,42 +480,123 @@ def delete_article(item: DeleteArticleRequest):
     except Exception as e:
         return fail(msg=f"删除操作失败: {str(e)}", code=Code.GITHUB_ERROR)
 
+# 通用重命名/发布/撤回逻辑
+def _handle_rename_action(item: RenameArticleRequest, action_label: str):
+    # 1. 基础校验
+    if not item.old_path or not item.new_path:
+        return fail(msg="路径不能为空", code=Code.PARAM_ERROR)
+    if item.old_path == item.new_path:
+        return fail(msg="新旧路径不能相同", code=Code.PARAM_ERROR)
+
+    # 2. 获取内容
+    content = item.content
+    if not content:
+        try:
+            old_file = client.repo.get_contents(item.old_path)
+            # 旧路径如果是目录则视为无效
+            if isinstance(old_file, list):
+                return fail(msg="旧路径为目录，无法重命名", code=Code.PARAM_ERROR)
+            content = base64.b64decode(old_file.content).decode('utf-8') # type: ignore
+        except Exception as e:
+            if getattr(e, "status", None) == 404:
+                return fail(msg="旧路径不存在", code=Code.NOT_FOUND)
+            raise
+
+    # 3. 创建或覆盖目标文件
+    try:
+        existing_target = _get_existing_file(item.new_path)
+        if existing_target:
+            if isinstance(existing_target, list):
+                return fail(msg="目标路径为目录，无法覆盖", code=Code.CONFLICT)
+            if not item.overwrite:
+                return fail(msg="目标路径已存在", code=Code.CONFLICT)
+
+            logger.info(f"{action_label}.overwrite: {item.old_path} -> {item.new_path}")
+            create_res = client.repo.update_file(
+                path=item.new_path,
+                message=f"CMS {action_label} (Overwrite): {item.old_path} -> {item.new_path}",
+                content=content,
+                sha=existing_target.sha, # type: ignore
+                branch=GITHUB_BRANCH
+            )
+        else:
+            logger.info(f"{action_label}.create: {item.old_path} -> {item.new_path}")
+            create_res = client.repo.create_file(
+                path=item.new_path,
+                message=f"CMS {action_label} (Create): {item.old_path} -> {item.new_path}",
+                content=content,
+                branch=GITHUB_BRANCH
+            )
+    except Exception as e:
+        return fail(msg=f"{action_label}失败: {str(e)}", code=Code.GITHUB_ERROR)
+
+    # 4. 删除旧路径文件
+    try:
+        client.repo.delete_file(
+            path=item.old_path,
+            message=f"CMS {action_label} (Delete): {item.old_path}",
+            sha=item.sha,
+            branch=GITHUB_BRANCH
+        )
+    except Exception as e:
+        return fail(msg=f"{action_label}失败(删除旧文件): {str(e)}", code=Code.GITHUB_ERROR)
+    
+    # 缓存清理
+    delete_cache(CACHE_KEY_ARTICLES)
+    delete_cache(f"cms:article:{item.old_path}")
+    delete_cache(f"cms:article:{item.new_path}")
+    delete_cache(CACHE_KEY_VERSION)
+    
+    # 返回新文件的 SHA，以便前端立即继续编辑新文件
+    return success(msg=f"{action_label}成功", sha=create_res['content'].sha)
+
 # 新增：重命名接口 (GitHub API 逻辑：新建+删除)
 @app.post("/api/article/rename", dependencies=[Depends(get_current_user)])
 def rename_article(item: RenameArticleRequest):
     try:
-        # 1. 获取内容
-        content = item.content
-        if not content:
-            old_file = client.repo.get_contents(item.old_path)
-            content = base64.b64decode(old_file.content).decode('utf-8') # type: ignore
-
-        # 2. 在新路径创建文件
-        create_res = client.repo.create_file(
-            path=item.new_path,
-            message=f"CMS Rename (Create): {item.old_path} -> {item.new_path}",
-            content=content,
-            branch=GITHUB_BRANCH
-        )
-
-        # 3. 删除旧路径文件
-        client.repo.delete_file(
-            path=item.old_path,
-            message=f"CMS Rename (Delete): {item.old_path}",
-            sha=item.sha,
-            branch=GITHUB_BRANCH
-        )
-        
-        # 缓存清理
-        delete_cache(CACHE_KEY_ARTICLES)
-        delete_cache(f"cms:article:{item.old_path}")
-        delete_cache(f"cms:article:{item.new_path}")
-        delete_cache(CACHE_KEY_VERSION)
-        
-        # 返回新文件的 SHA，以便前端立即继续编辑新文件
-        return success(msg="重命名成功", sha=create_res['content'].sha)
+        err = _require_github_client()
+        if err: return err
+        return _handle_rename_action(item, "Rename")
     except Exception as e:
         return fail(msg=f"重命名失败: {str(e)}", code=Code.INTERNAL_ERROR)
+
+# 新增：发布草稿
+@app.post("/api/article/publish", dependencies=[Depends(get_current_user)])
+def publish_article(item: RenameArticleRequest):
+    try:
+        err = _require_github_client()
+        if err: return err
+        validation_error = _validate_publish_paths(item.old_path, item.new_path, DRAFT_PREFIX, POST_PREFIX)
+        if validation_error:
+            return validation_error
+
+        # 冲突检测
+        if _get_existing_file(item.new_path):
+            return fail(msg="目标路径已存在，请确认是否覆盖", code=Code.CONFLICT)
+
+        logger.info(f"publish: {item.old_path} -> {item.new_path}")
+        return _handle_rename_action(item, "Publish")
+    except Exception as e:
+        return fail(msg=f"发布失败: {str(e)}", code=Code.INTERNAL_ERROR)
+
+# 新增：撤回为草稿
+@app.post("/api/article/unpublish", dependencies=[Depends(get_current_user)])
+def unpublish_article(item: RenameArticleRequest):
+    try:
+        err = _require_github_client()
+        if err: return err
+        validation_error = _validate_publish_paths(item.old_path, item.new_path, POST_PREFIX, DRAFT_PREFIX)
+        if validation_error:
+            return validation_error
+
+        # 冲突检测
+        if _get_existing_file(item.new_path):
+            return fail(msg="目标路径已存在，请确认是否覆盖", code=Code.CONFLICT)
+
+        logger.info(f"unpublish: {item.old_path} -> {item.new_path}")
+        return _handle_rename_action(item, "Unpublish")
+    except Exception as e:
+        return fail(msg=f"撤回失败: {str(e)}", code=Code.INTERNAL_ERROR)
 
 if __name__ == "__main__":
     import uvicorn
