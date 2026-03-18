@@ -47,12 +47,21 @@
           @node-contextmenu="handleRightClick"
         >
           <template v-slot="{ node, data }">
-            <div class="tree-node-wrapper" :class="{ 'is-virtual': data.isVirtual }">
+            <div class="tree-node-wrapper" :class="{ 'is-virtual': data.isVirtual, 'is-group': data.group }">
               <template v-if="!data.isEditing">
                 <span class="icon">{{ data.type === 'folder' ? '📁' : '📄' }}</span>
                 <span class="label" :class="{ 'is-draft': data.isDraft }">{{ node.label }}</span>
                 <span v-if="data.isModified" class="unsaved-dot"></span>
                 <el-tag v-if="data.isVirtual" size="small" type="info" effect="plain" class="local-tag">本地</el-tag>
+                <el-tag
+                  v-else-if="data.type === 'file'"
+                  size="small"
+                  :type="data.isDraft ? 'warning' : 'success'"
+                  effect="plain"
+                  class="status-tag"
+                >
+                  {{ data.isDraft ? '草稿' : '已发布' }}
+                </el-tag>
               </template>
 
               <template v-else>
@@ -163,6 +172,7 @@ const handleBackgroundClick = (event: MouseEvent) => {
 // 触发右键菜单
 const handleRightClick = (event: MouseEvent, data: any) => {
   if (isCollapsed.value) return // 收缩状态不显示右键菜单
+  if (data?.group) return // 分组节点不允许重命名/删除
   event.preventDefault()
   menu.visible = true
   menu.x = event.clientX
@@ -176,6 +186,10 @@ const hideContextMenu = () => {
 
 // 处理菜单动作
 const handleMenuAction = (action: 'rename' | 'delete') => {
+  if (menu.data?.group) {
+    menu.visible = false
+    return
+  }
   if (action === 'rename') {
     menu.data.isEditing = true
     menu.data.tempName = menu.data.name
@@ -431,6 +445,22 @@ const handleNameConfirm = (data: any) => {
         padding: 0 4px;
         font-size: 10px;
         transform: scale(0.8);
+      }
+
+      .status-tag {
+        margin-left: 8px;
+        height: 16px;
+        line-height: 14px;
+        padding: 0 4px;
+        font-size: 10px;
+        transform: scale(0.8);
+      }
+
+      &.is-group {
+        .label {
+          font-weight: 700;
+          color: #4a7ee5;
+        }
       }
     }
   }

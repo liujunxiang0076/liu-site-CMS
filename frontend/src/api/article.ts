@@ -15,7 +15,7 @@ export const articleApi = {
 
   // 获取文章列表（带缓存策略）
   getList: async (forceRefresh = false) => {
-    const CACHE_KEY = 'cms_article_list';
+    const CACHE_KEY = 'cms_article_list_v2';
     
     if (!forceRefresh) {
       const cached = await ApiCache.get<any[]>(CACHE_KEY);
@@ -109,16 +109,58 @@ export const articleApi = {
     if (res.code === 200) {
       // 激进失效策略
       await ApiCache.remove('cms_article_list');
+      await ApiCache.remove('cms_article_list_v2');
       await ApiCache.remove(`cms_article_${data.path}`);
     }
     return res;
   },
 
   // 重命名
-  rename: async (oldPath: string, newPath: string, sha: string) => {
-    const res = await apiClient.post<any, ApiResponse<{ sha: string }>>('/article/rename', { old_path: oldPath, new_path: newPath, sha });
+  rename: async (oldPath: string, newPath: string, sha: string, content?: string, overwrite: boolean = false) => {
+    const res = await apiClient.post<any, ApiResponse<{ sha: string }>>('/article/rename', { 
+      old_path: oldPath, 
+      new_path: newPath, 
+      sha, 
+      content,
+      overwrite
+    });
     if (res.code === 200) {
       await ApiCache.remove('cms_article_list');
+      await ApiCache.remove('cms_article_list_v2');
+      await ApiCache.remove(`cms_article_${oldPath}`);
+      await ApiCache.remove(`cms_article_${newPath}`);
+    }
+    return res;
+  },
+
+  // 发布草稿
+  publish: async (oldPath: string, newPath: string, sha: string, content?: string) => {
+    const res = await apiClient.post<any, ApiResponse<{ sha: string }>>('/article/publish', { 
+      old_path: oldPath, 
+      new_path: newPath, 
+      sha,
+      content
+    }, { skipErrorHandle: true });
+    if (res.code === 200) {
+      await ApiCache.remove('cms_article_list');
+      await ApiCache.remove('cms_article_list_v2');
+      await ApiCache.remove(`cms_article_${oldPath}`);
+      await ApiCache.remove(`cms_article_${newPath}`);
+    }
+    return res;
+  },
+
+  // 撤回为草稿
+  unpublish: async (oldPath: string, newPath: string, sha: string, content?: string) => {
+    const res = await apiClient.post<any, ApiResponse<{ sha: string }>>('/article/unpublish', { 
+      old_path: oldPath, 
+      new_path: newPath, 
+      sha,
+      content
+    }, { skipErrorHandle: true });
+    if (res.code === 200) {
+      await ApiCache.remove('cms_article_list');
+      await ApiCache.remove('cms_article_list_v2');
       await ApiCache.remove(`cms_article_${oldPath}`);
       await ApiCache.remove(`cms_article_${newPath}`);
     }
@@ -130,6 +172,7 @@ export const articleApi = {
     const res = await apiClient.post<any, ApiResponse<null>>('/article/delete', { path, sha, message });
     if (res.code === 200) {
       await ApiCache.remove('cms_article_list');
+      await ApiCache.remove('cms_article_list_v2');
       await ApiCache.remove(`cms_article_${path}`);
     }
     return res;

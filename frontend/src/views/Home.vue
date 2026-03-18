@@ -36,6 +36,15 @@
           <span class="path-tag" :class="articleStatus">{{ currentArticle.path }}</span>
           <div class="header-actions">
             <span v-if="autoSaveStatus" class="autosave-status">{{ autoSaveStatus }}</span>
+            <el-button
+              v-if="publishAction"
+              :type="publishAction.type"
+              :loading="isPublishing"
+              :disabled="isPublishing || isSaving"
+              @click="handlePublishToggle"
+            >
+              {{ publishAction.label }}
+            </el-button>
             <el-button type="primary" :loading="isSaving" @click="handleSave" :disabled="!isModified">
               {{ isSaving ? '同步中...' : '推送至 GitHub' }}
             </el-button>
@@ -107,6 +116,7 @@ const isSideLoading = ref(false)
 const isDataFromCache = ref(false)
 const isContentLoading = ref(false)
 const isSaving = ref(false)
+const isPublishing = ref(false)
 const originalContent = ref('')
 const localSavedContent = ref('') // 新增：本地保存的内容快照
 const selectedNode = ref<any>(null) // 统一记录当前选中的节点
@@ -276,6 +286,25 @@ const articleStatus = computed(() => {
   return ''
 })
 
+const isDraftPath = (path: string) => path.startsWith('src/drafts/')
+const isPostPath = (path: string) => path.startsWith('src/posts/')
+const getPublishTargetPath = (path: string) => {
+  if (isDraftPath(path)) return path.replace('src/drafts/', 'src/posts/')
+  if (isPostPath(path)) return path.replace('src/posts/', 'src/drafts/')
+  return ''
+}
+
+const publishAction = computed(() => {
+  if (!currentArticle.value?.path) return null
+  if (isDraftPath(currentArticle.value.path)) {
+    return { label: '发布', type: 'success', mode: 'publish' as const }
+  }
+  if (isPostPath(currentArticle.value.path)) {
+    return { label: '撤回为草稿', type: 'warning', mode: 'unpublish' as const }
+  }
+  return null
+})
+
 // --- 核心逻辑 ---
 
 /**
@@ -293,8 +322,8 @@ const checkDuplicateName = (parentPath: string, fileName: string): boolean => {
         if (res) return res
       }
     }
-    // 特殊情况：如果是根目录 src/posts，可能直接就是 treeData
-    if (parentPath === 'src/posts' || parentPath === 'src') return nodes
+    // 特殊情况：如果是根目录 src，返回根列表
+    if (parentPath === 'src') return nodes
     return null
   }
 
@@ -766,6 +795,112 @@ const handleSave = async () => {
     }
   } finally {
     isSaving.value = false
+  }
+}
+
+const applyPublishResult = async (newPath: string, newSha?: string) => {
+  if (!currentArticle.value) return
+  const oldPath = currentArticle.value.path
+
+  currentArticle.value.path = newPath
+  currentArticle.value.sha = newSha ?? currentArticle.value.sha
+  currentArticle.value.isSynced = true
+  currentArticle.value.isLocal = false
+
+  originalContent.value = currentArticle.value.content
+  localSavedContent.value = currentArticle.value.content
+  autoSaveStatus.value = ''
+
+  // 清理旧路径草稿缓存
+  localStorage.removeItem('cms_draft_' + oldPath)
+  localStorage.removeItem('cms_draft_' + newPath)
+
+  // 同步选中节点信息
+  if (selectedNode.value?.path === oldPath) {
+    selectedNode.value.path = newPath
+    selectedNode.value.isDraft = isDraftPath(newPath)
+  }
+
+  await fetchList(true)
+  if (sidebarRef.value) {
+    sidebarRef.value.setCurrentKey(newPath)
+  }
+}
+
+const handlePublishToggle = async () => {
+  if (!currentArticle.value || !publishAction.value || isPublishing.value) return
+
+  if (currentArticle.value.isLocal) {
+    ElMessage.warning('请先同步到 GitHub')
+    return
+  }
+
+  const oldPath = currentArticle.value.path
+  const newPath = getPublishTargetPath(oldPath)
+  if (!newPath) {
+    ElMessage.error('当前路径不支持发布/撤回')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要${publishAction.value.label}该文章吗？`,
+      '确认操作',
+      {
+        confirmButtonText: publishAction.value.label,
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+
+  isPublishing.value = true
+  try {
+    const res = publishAction.value.mode === 'publish'
+      ? await articleApi.publish(oldPath, newPath, currentArticle.value.sha, currentArticle.value.content)
+      : await articleApi.unpublish(oldPath, newPath, currentArticle.value.sha, currentArticle.value.content)
+
+    if (res.code === 200) {
+      ElMessage.success(`${publishAction.value.label}成功`)
+      await applyPublishResult(newPath, (res as any).sha)
+      return
+    }
+  } catch (err: any) {
+    if (err?.code === 409) {
+      try {
+        await ElMessageBox.confirm(
+          '目标路径已存在，是否覆盖？',
+          '发布冲突',
+          {
+            confirmButtonText: '覆盖',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        )
+      } catch {
+        return
+      }
+
+      const overwriteRes = await articleApi.rename(
+        oldPath,
+        newPath,
+        currentArticle.value.sha,
+        currentArticle.value.content,
+        true
+      )
+      if (overwriteRes.code === 200) {
+        ElMessage.success('覆盖成功')
+        await applyPublishResult(newPath, (overwriteRes as any).sha)
+        return
+      }
+    }
+
+    const msg = err?.msg || err?.message || `${publishAction.value.label}失败`
+    ElMessage.error(msg)
+  } finally {
+    isPublishing.value = false
   }
 }
 

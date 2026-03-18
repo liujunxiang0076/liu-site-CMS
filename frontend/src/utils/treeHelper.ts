@@ -5,7 +5,7 @@
  */
 export const findNodeByPath = (nodes: any[], path: string): any | any[] | null => {
   // Special case for root
-  if (path === 'src/posts' || path === 'src') {
+  if (path === 'src') {
     return nodes;
   }
 

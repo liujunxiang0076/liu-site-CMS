@@ -39,7 +39,7 @@ apiClient.interceptors.response.use(
 
     // 如果设置了跳过错误处理，则直接 reject，不弹窗
     if (skipErrorHandle) {
-      return Promise.reject(new Error(res.msg));
+      return Promise.reject(res);
     }
 
     switch (res.code) {
