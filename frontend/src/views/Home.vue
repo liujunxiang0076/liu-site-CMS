@@ -756,7 +756,9 @@ const handleSave = async () => {
     if (currentArticle.value.isLocal) {
       // 尝试获取远程文件信息，看是否已存在
       try {
-        const remoteRes = await articleApi.getDetail(currentArticle.value.path, true)
+        const remoteRes = await articleApi.getDetail(currentArticle.value.path, true, {
+          skipErrorHandle: true
+        })
         // 如果能获取到，说明远程已存在
         try {
            await ElMessageBox.confirm(

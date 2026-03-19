@@ -56,7 +56,7 @@ export const articleApi = {
   },
 
   // 获取文章详情（带缓存策略）
-  getDetail: async (path: string, forceRefresh = false) => {
+  getDetail: async (path: string, forceRefresh = false, options?: { skipErrorHandle?: boolean }) => {
     const CACHE_KEY = `cms_article_${path}`;
     
     if (!forceRefresh) {
@@ -89,7 +89,10 @@ export const articleApi = {
       path: string;
       title: string;
       content: string;
-    }>>('/article/detail', { params: { path, force_refresh: forceRefresh } });
+    }>>('/article/detail', {
+      params: { path, force_refresh: forceRefresh },
+      ...options
+    });
 
     if (res.code === 200) {
       apiClient.get<any, ApiResponse<{ version: string }>>('/version').then(vRes => {
